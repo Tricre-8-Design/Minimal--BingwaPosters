@@ -181,8 +181,8 @@ export default function TemplateGallery() {
       <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
         <div className="text-center space-y-4">
           <Loader2 className="w-12 h-12 text-purple-400 animate-spin mx-auto" />
-          <p className="text-white font-space text-xl">Loading templates...</p>
-          <p className="text-blue-200 font-inter text-sm">Connecting to Template Store...</p>
+          <p className="text-white font-space text-xl">Loading Posters...</p>
+          <p className="text-blue-200 font-inter text-sm">Getting All Bingwa Posters...</p>
         </div>
       </div>
     )
@@ -237,7 +237,7 @@ export default function TemplateGallery() {
               <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-blue-400 rounded-lg flex items-center justify-center neon-purple">
                 <Sparkles className="w-5 h-5 text-white animate-pulse" />
               </div>
-              <span className="text-white font-bold text-xl font-space">Template Gallery</span>
+              <span className="text-white font-bold text-xl font-space">Bingwa Posters</span>
             </div>
           </div>
 
@@ -256,7 +256,7 @@ export default function TemplateGallery() {
       <section className="relative z-10 px-4 md:px-6 py-8">
         <div className="max-w-7xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 animate-in fade-in-0 slide-in-from-top-4 duration-1000 font-space">
-            Choose Your Vibe
+            Choose. Customize. Earn Visibility.
           </h1>
           <p className="text-xl text-blue-200 mb-8 animate-in fade-in-0 slide-in-from-top-6 duration-1000 delay-200 font-inter">
             Pick a template that matches your need. Kila mtu ana style yake!

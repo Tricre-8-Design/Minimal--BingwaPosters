@@ -277,7 +277,7 @@ export default function AdminPage() {
               <BarChart3 className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white font-space">Post Admin</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-white font-space">Bingwa Posters Admin Panel</h1>
               <p className="text-blue-200 font-inter text-sm md:text-base">Real-time poster generation analytics</p>
             </div>
           </div>
