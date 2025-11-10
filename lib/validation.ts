@@ -22,3 +22,11 @@ export const isValidComment = (text?: string | null, maxLen = 500): boolean => {
 export const isValidRating = (rating: number): boolean => {
   return Number.isFinite(rating) && rating >= 1 && rating <= 5
 }
+
+// Validates Kenya local phone format: 10 digits starting with 07 or 01
+// Input is a user-entered local number (e.g., "07XX XXX XXX"), not E.164
+export const isValidKenyaLocalPhone = (text?: string | null): boolean => {
+  if (!text) return false
+  const digits = String(text).replace(/\D/g, "")
+  return digits.length === 10 && (digits.startsWith("07") || digits.startsWith("01"))
+}

@@ -11,6 +11,7 @@ import { Sparkles, ArrowLeft, Smartphone, CreditCard, CheckCircle, XCircle, Cloc
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { supabase, showToast } from "@/lib/supabase"
+import { isValidKenyaLocalPhone } from "@/lib/validation"
 
 export default function PaymentPage() {
   const params = useParams()
@@ -47,24 +48,31 @@ export default function PaymentPage() {
     return () => clearInterval(interval)
   }, [countdown])
 
-  const formatPhoneNumber = (value: string) => {
-    // Remove all non-digits
-    const digits = value.replace(/\D/g, "")
+  // Auto-redirect to download page shortly after successful payment
+  useEffect(() => {
+    if (paymentStatus === "success") {
+      const t = setTimeout(() => {
+        router.push(`/download/${sessionId}`)
+      }, 1200)
+      return () => clearTimeout(t)
+    }
+  }, [paymentStatus, router, sessionId])
 
-    // Format as 07XX XXX XXX
-    if (digits.length <= 3) return digits
-    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`
-    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`
+  const formatPhoneNumber = (value: string) => {
+    // Format as 07XX XXX XXX (10 digits)
+    const d = value.replace(/\D/g, "")
+    const parts = [d.slice(0, 2), d.slice(2, 4), d.slice(4, 7), d.slice(7, 10)].filter(Boolean)
+    return parts.join(" ")
   }
 
   const validatePhoneNumber = (number: string) => {
-    const digits = number.replace(/\D/g, "")
-    return digits.length === 9 && (digits.startsWith("7") || digits.startsWith("1"))
+    // Accept 10-digit local Safaricom format starting with 07 or 01
+    return isValidKenyaLocalPhone(number)
   }
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatPhoneNumber(e.target.value)
-    if (formatted.replace(/\D/g, "").length <= 9) {
+    if (formatted.replace(/\D/g, "").length <= 10) {
       setMpesaNumber(formatted)
     }
   }
@@ -99,14 +107,15 @@ export default function PaymentPage() {
 
       const checkoutId = json.CheckoutRequestID
 
-      // Poll for payment confirmation
+      // Poll for payment confirmation by session only to avoid receipt/code swaps
       let remaining = 60
       const poll = async () => {
         const { data, error } = await supabase
           .from("payments")
-          .select("status, mpesa_code")
+          .select("status, mpesa_code, created_at")
           .eq("session_id", sessionId)
-          .eq("mpesa_code", checkoutId)
+          .order("created_at", { ascending: false })
+          .limit(1)
           .single()
 
         if (!error && data && data.status === "Paid") {
@@ -243,6 +252,8 @@ export default function PaymentPage() {
                     value={mpesaNumber}
                     onChange={handlePhoneChange}
                     placeholder="07XX XXX XXX"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     className="glass text-white placeholder-blue-300 border-white/20 focus:border-green-400 focus:neon-green transition-all duration-300 font-inter text-lg py-3"
                   />
                   <p className="text-sm text-blue-300 mt-1 font-inter">
@@ -342,6 +353,7 @@ export default function PaymentPage() {
                     Download Your Poster
                   </Button>
                 </Link>
+                <p className="text-blue-300 font-inter">Redirecting…</p>
               </div>
             </Card>
           )}
