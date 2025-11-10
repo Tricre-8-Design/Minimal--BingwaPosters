@@ -5,11 +5,15 @@ import { createClient } from "@supabase/supabase-js"
 // - Generates deterministic file names using sessionId + fieldName + timestamp
 // - Returns public URLs for use with Placid layers
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-// Create admin client for server-side uploads
-const supabaseAdmin = createClient(supabaseUrl, serviceKey)
+// Lazily create Supabase admin client to avoid build-time env access
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !serviceKey) {
+    throw new Error("Supabase service credentials missing")
+  }
+  return createClient(supabaseUrl, serviceKey)
+}
 
 function sanitizeName(input: string) {
   return input.replace(/[^a-zA-Z0-9-_]/g, "_").toLowerCase()
@@ -37,9 +41,7 @@ export async function uploadDataUrlToAssets(
     fieldName: string
   },
 ): Promise<{ path: string; publicUrl: string }> {
-  if (!supabaseUrl || !serviceKey) {
-    throw new Error("Supabase service credentials missing")
-  }
+  const supabaseAdmin = getSupabaseAdmin()
 
   const { mime, ext, base64 } = parseDataUrl(dataUrl)
   const buffer = Buffer.from(base64, "base64")
@@ -74,6 +76,7 @@ export function resolveAssetPublicUrl(pathOrUrl: string): string {
     return pathOrUrl
   }
   const cleaned = pathOrUrl.replace(/^\/+/, "")
+  const supabaseAdmin = getSupabaseAdmin()
   const { data } = supabaseAdmin.storage.from("assets").getPublicUrl(cleaned)
   return data?.publicUrl || pathOrUrl
 }

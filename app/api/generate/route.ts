@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 import { createClient } from "@supabase/supabase-js"
 import { uploadDataUrlToAssets, resolveAssetPublicUrl } from "@/lib/storage"
 import { PosterStatus, type PosterStatusType } from "@/lib/status"

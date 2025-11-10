@@ -100,7 +100,7 @@ Deno.serve(async () => {
     const total: number = rows.reduce((acc, r) => acc + (Number(r.amount) || 0), 0)
     const successfulCount: number = typeof count === "number" ? count : rows.length
 
-    const message: string = `BingwaZone Weekly Report: KSh ${Math.round(total)} from ${successfulCount} transactions.`
+    const message: string = `BingwaPosters Weekly Report: KSh ${Math.round(total)} from ${successfulCount} transactions.`
     const recipients: string[] = ["+254727921038", "+254717444266"]
 
     // Send SMS and retry once on failure
