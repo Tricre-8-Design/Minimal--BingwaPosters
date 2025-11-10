@@ -811,3 +811,29 @@ Build your app on:
 ---
 
 *This README serves as complete technical documentation for the PosterGen platform. For questions or issues, refer to the troubleshooting section or consult the inline code documentation.*
+## Supabase Edge Function: weekly_report
+
+- Purpose: Every Monday 09:00 EAT, text admins the prior week’s revenue summary.
+- Location: `supabase/functions/weekly_report/index.ts`
+- Env vars (set as Supabase secrets):
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `SENDGRID_API_KEY` (reserved)
+  - `BLAZE_API_KEY`
+  - `BLAZE_SENDER_ID`
+
+### Deploy and Schedule
+- Set secrets:
+  - `supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... BLAZE_API_KEY=... BLAZE_SENDER_ID=... SENDGRID_API_KEY=...`
+- Deploy:
+  - `supabase functions deploy weekly_report`
+- Schedule (UTC cron example for Monday 09:00 EAT):
+  - `supabase functions schedule weekly_report --cron "0 6 * * 1"`
+  - Adjust as needed; user requested: `"0 9 * * 1"`.
+
+### Function Behavior
+- Queries `transactions` where `status = 'SUCCESS'` and `created_at >= now() - 7 days`.
+- Computes `total` (sum of `amount`) and `count`.
+- Sends SMS via BlazeTechScope with a single retry on failure.
+- Logs SMS status and message ID to server console (internal logs only).
+- Returns `{ success: true, total }` on success; `{ error: ... }` with appropriate status otherwise.
