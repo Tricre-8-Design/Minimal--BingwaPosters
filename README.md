@@ -613,7 +613,7 @@ cp .env.example .env.local
 # Edit .env.local with your credentials
 
 # 3. Set up Supabase tables (run SQL in Supabase dashboard)
-# See database schema SQL in source code
+# Use `scripts/admin_logs.sql` and `scripts/create-error-logs.sql` for required tables
 
 # 4. Run development server
 npm run dev
