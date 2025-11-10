@@ -263,8 +263,9 @@ public/
 
 ## Testing
 
-- Unit tests (Vitest): `npm run test`
-- E2E example (Playwright): `npm run e2e` (ensure the dev server is running)
+- Test suites were intentionally removed for production deployment to reduce bundle and CI noise.
+- If you re-enable tests, use `Vitest` for unit tests and `Playwright` for e2e.
+- Scripts remain in `package.json` but are currently non-functional without test files.
 
 ### Headline Text Transition
 
@@ -313,11 +314,26 @@ import HeadlineRotator from "@/components/ui/headline-rotator"
   - Misconfiguration (missing `ADMIN_JWT_SECRET`) → logs and redirects to `/admin/login`.
 
 ### Error Logging
-- Server errors are logged via `lib/server-errors.ts`:
-  - Always logs to server console.
-  - Optional webhook `LOG_WEBHOOK_URL`.
-  - Optional Supabase private table `error_logs` when `SUPABASE_SERVICE_ROLE_KEY` is set.
+- Server errors are handled via `lib/server-errors.ts`:
+  - Logs to a webhook when `LOG_WEBHOOK_URL` is set.
+  - Falls back to Supabase private table `error_logs` when `SUPABASE_SERVICE_ROLE_KEY` is available.
+  - Avoids noisy server console output in production.
 - Middleware uses `logError` for missing tokens, invalid tokens, and env misconfiguration.
+
+### Environment Variables
+Configure these variables in `.env.local` (do not commit):
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` (client-only)
+- `SUPABASE_SERVICE_ROLE_KEY` (server-only)
+- `PLACID_API_KEY`
+- `PLACID_WEBHOOK_SUCCESS_URL`
+- `ADMIN_JWT_SECRET`
+- `MPESA_CONSUMER_KEY`
+- `MPESA_CONSUMER_SECRET`
+- `MPESA_SHORTCODE`
+- `MPESA_PASSKEY`
+- `MPESA_CALLBACK_URL`
+- Optional: `LOG_WEBHOOK_URL`, `MPESA_ENV` (`sandbox` | `production`)
 - Admin login API wraps errors with `safeErrorResponse` for friendly client messages.
 
 ### Route Verification on Startup
