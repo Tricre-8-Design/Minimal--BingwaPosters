@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 
 // Server-side error utilities
 // - logError: writes detailed errors to Supabase (private table) or webhook
@@ -70,6 +69,21 @@ export async function logError({
   // Fallback to Supabase private table if service role available
   if (supabaseUrl && serviceKey) {
     try {
+      // Use dynamic import to avoid bundling supabase-js into Edge Runtime (e.g., middleware)
+      const isNode = (() => {
+        try {
+          return typeof process !== "undefined" && !!process.versions?.node
+        } catch {
+          return false
+        }
+      })()
+
+      if (!isNode) {
+        // In Edge runtime, skip Supabase fallback to avoid Node-only APIs
+        return
+      }
+
+      const { createClient } = await import("@supabase/supabase-js")
       const supabase = createClient(supabaseUrl, serviceKey)
       await supabase.from("error_logs").insert({
         source,
