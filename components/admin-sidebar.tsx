@@ -84,7 +84,7 @@ export default function AdminSidebar() {
                 <Link key={item.name} href={item.href} onClick={() => setIsMobileMenuOpen(false)}>
                   <Button
                     variant="ghost"
-                    className={`w-full justify-start space-x-3 h-12 transition-all duration-300 font-inter ${
+                    className={`w-full justify-start space-x-3 h-12 transition-smooth font-inter hover-subtle ${
                       isActive
                         ? "bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-white border border-purple-400/30 neon-purple"
                         : "text-blue-200 hover:text-white hover:bg-white/10 hover:neon-blue"
@@ -105,14 +105,20 @@ export default function AdminSidebar() {
                 <span className="text-white font-bold text-sm">A</span>
               </div>
               <div>
-                <p className="text-white font-space text-sm">Admin User</p>
-                <p className="text-blue-200 font-inter text-xs">tricreta@gmail.com</p>
+                <p className="text-white font-space text-sm">Admin</p>
+                <p className="text-blue-200 font-inter text-xs">—</p>
               </div>
             </div>
 
             <Button
               variant="ghost"
               className="w-full justify-start space-x-3 h-10 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-300 font-inter"
+              onClick={async () => {
+                try {
+                  await fetch("/api/admin/logout", { method: "POST" })
+                } catch {}
+                window.location.href = "/admin/login"
+              }}
             >
               <LogOut className="w-4 h-4" />
               <span>Sign Out</span>

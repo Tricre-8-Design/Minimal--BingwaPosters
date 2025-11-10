@@ -3,7 +3,6 @@ import { createBrowserClient } from "@supabase/ssr"
 // Environment variables - these need to be set in your project
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const makeWebhookUrl = process.env.NEXT_PUBLIC_MAKE_WEBHOOK_URL!
 
 // Validate environment variables
 if (!supabaseUrl) {
@@ -23,20 +22,15 @@ export const supabaseAdmin = supabase
 // Test connection function
 export const testSupabaseConnection = async () => {
   try {
-    console.log("🔍 Testing Supabase connection...")
-
     // Test basic connection
     const { data, error } = await supabase.from("poster_templates").select("count", { count: "exact", head: true })
 
     if (error) {
-      console.error("❌ Supabase connection failed:", error)
       return { success: false, error: error.message }
     }
 
-    console.log("✅ Supabase connection successful")
     return { success: true, count: data }
   } catch (err: any) {
-    console.error("❌ Supabase connection error:", err)
     return { success: false, error: err.message }
   }
 }
@@ -47,8 +41,9 @@ export interface PosterTemplate {
   template_id: string
   template_uuid: string // Required field (alias for placid_id)
   price: number
-  description: string
-  thumbnail: string // base64 encoded
+  tag: string | null
+  is_active: boolean
+  thumbnail_path: string | null
   category: string
   fields_required: Array<{
     name: string
@@ -64,7 +59,10 @@ export interface GeneratedPoster {
   template_id: string
   template_uuid: string // Required field for Placid integration
   image_url: string | null
-  time: string
+  // Legacy update timestamp
+  time?: string
+  // Creation timestamp
+  created_at: string
   session_id: string // Added session_id
 }
 
@@ -72,8 +70,11 @@ export interface Payment {
   phone_number: string
   image_url: string | null // Can be null if payment is for something else or not linked to image yet
   mpesa_code: string
-  status: "Paid" | "Pending" | "Failed" | "success" | "failed" // Added Paystack specific statuses for flexibility
-  time: string
+  status: "Paid" | "Pending" | "Failed" // Standardized M-Pesa payment statuses
+  // Legacy update timestamp (may be absent)
+  time?: string
+  // Creation timestamp
+  created_at: string
   template_id: string | null // Can be null
   session_id: string // Added session_id
   amount: number // Added amount in KES
@@ -83,7 +84,10 @@ export interface Feedback {
   phone_number: string
   rating: number
   comment: string
-  time: string
+  // Legacy update timestamp (may be absent)
+  time?: string
+  // Creation timestamp
+  created_at: string
   template_id: string
 }
 
@@ -126,46 +130,46 @@ export interface Notification {
 }
 
 // Helper function to convert file to base64
-export const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => {
-      const result = reader.result as string
-      // Remove the data:image/...;base64, prefix to get just the base64 string
-      const base64 = result.split(",")[1]
-      resolve(base64)
-    }
-    reader.onerror = (error) => reject(error)
-  })
+// Public URL helper for thumbnails stored in Supabase Storage
+export const getThumbnailUrl = (thumbnailPath?: string | null): string => {
+  // Returns a public URL for a thumbnail stored in the 'templates-thumbnails' bucket
+  // Accepts either a relative storage path or an absolute public URL; normalizes input safely.
+  if (!thumbnailPath) return "/placeholder.svg"
+
+  // If already a complete URL or data/blob URL, return as-is
+  if (
+    typeof thumbnailPath === "string" &&
+    (thumbnailPath.startsWith("http") || thumbnailPath.startsWith("data:") || thumbnailPath.startsWith("blob:"))
+  ) {
+    return thumbnailPath
+  }
+
+  // Normalize path: strip leading slashes and bucket prefix if present
+  let normalizedPath = thumbnailPath.trim()
+  // remove accidental quotes
+  normalizedPath = normalizedPath.replace(/^"|"$/g, "").replace(/^'|'$/g, "")
+  normalizedPath = normalizedPath.replace(/^\/+/, "")
+  normalizedPath = normalizedPath.replace(/^templates-thumbnails\//, "")
+  normalizedPath = normalizedPath.replace(/^public\//, "")
+  normalizedPath = normalizedPath.replace(/^storage\//, "")
+
+  // Some legacy records may store only a file name; ensure directory prefix
+  if (!normalizedPath.includes("/")) {
+    normalizedPath = `thumbnails/${normalizedPath}`
+  }
+
+  // Ensure we use a URI-safe path
+  const safePath = normalizedPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+
+  const { data } = supabase.storage.from("templates-thumbnails").getPublicUrl(safePath)
+  return data?.publicUrl || "/placeholder.svg"
 }
 
 // Helper function to render thumbnail images properly
-export const renderThumbnail = (thumbnail: string | null | undefined, altText = "Template"): string => {
-  if (!thumbnail) {
-    return `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(altText)}`
-  }
-
-  // If it's already a complete URL (http/https/data/blob), return as is
-  if (
-    thumbnail.startsWith("http") ||
-    thumbnail.startsWith("data:") ||
-    thumbnail.startsWith("blob:") ||
-    thumbnail.startsWith("/")
-  ) {
-    return thumbnail
-  }
-
-  // If it's base64 data, convert to data URL
-  try {
-    // Test if it's valid base64
-    atob(thumbnail)
-    return `data:image/png;base64,${thumbnail}`
-  } catch (error) {
-    console.warn(`Invalid thumbnail data for ${altText}, using placeholder`)
-    return `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(altText)}`
-  }
-}
+// Removed legacy base64 thumbnail rendering in favor of Storage public URLs
 
 // Toast notification helper
 export const showToast = (message: string, type: "success" | "error" = "error") => {
@@ -223,108 +227,19 @@ export const checkDatabaseHealth = async () => {
     try {
       const { error } = await supabase.from(table).select("*").limit(1)
       results[table as keyof typeof results] = !error
-      if (error) {
-        console.error(`❌ Table ${table} error:`, error.message)
-      } else {
-        console.log(`✅ Table ${table} accessible`)
-      }
+      // silently record table accessibility in results without console output
     } catch (err) {
-      console.error(`❌ Table ${table} check failed:`, err)
+      // swallow errors to avoid exposing internal checks
     }
   }
 
   return results
 }
 
-// Function to send data to Make.com webhook
-interface MakeWebhookPayload {
-  session_id: string
-  template_id: string
-  template_name: string
-  template_integromat: string // This is the template_uuid expected by Make
-  user_data: Record<string, any>
-  generated_poster_id?: string // Optional, if you create the record before sending to Make
-  timestamp: string
-  // New fields for payment details
-  payment_status?: string
-  mpesa_code?: string
-  amount?: number
-  phone_number?: string
-}
-
-export async function sendToMakeWebhook(payload: MakeWebhookPayload) {
-  if (!makeWebhookUrl) {
-    console.error("NEXT_PUBLIC_MAKE_WEBHOOK_URL is not set.")
-    throw new Error("Webhook URL is not configured.")
-  }
-
-  try {
-    const response = await fetch(makeWebhookUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      console.error("Make webhook error response:", errorData)
-      throw new Error(`Webhook failed: ${response.status} ${response.statusText} - ${errorData.message || ""}`)
-    }
-
-    console.log("Successfully sent data to Make webhook.")
-    return await response.json()
-  } catch (error) {
-    console.error("Error sending to Make webhook:", error)
-    throw error
-  }
-}
+// Removed legacy Make.com webhook helpers and env vars. Direct Placid REST integration is used.
 
 // Function to verify thumbnail data in database
-export const verifyThumbnailData = async () => {
-  try {
-    const { data, error } = await supabase
-      .from("poster_templates")
-      .select("template_id, template_name, thumbnail")
-      .limit(5)
-
-    if (error) {
-      console.error("Error fetching thumbnail data:", error)
-      return
-    }
-
-    console.log("📸 Thumbnail verification:")
-    data?.forEach((template) => {
-      const thumbnailLength = template.thumbnail?.length || 0
-      const isValidBase64 = template.thumbnail ? isValidBase64String(template.thumbnail) : false
-
-      console.log(`- ${template.template_name}:`)
-      console.log(`  - Has thumbnail: ${!!template.thumbnail}`)
-      console.log(`  - Length: ${thumbnailLength} chars`)
-      console.log(`  - Valid base64: ${isValidBase64}`)
-
-      if (template.thumbnail && thumbnailLength < 100) {
-        console.log(`  - Preview: ${template.thumbnail.substring(0, 50)}...`)
-      }
-    })
-  } catch (error) {
-    console.error("Error verifying thumbnail data:", error)
-  }
-}
+// Removed legacy thumbnail verification utility tied to base64
 
 // Helper function to validate base64 string
-const isValidBase64String = (str: string): boolean => {
-  try {
-    // Remove data URL prefix if present
-    const base64String = str.includes(",") ? str.split(",")[1] : str
-
-    // Check if it's valid base64
-    const decoded = atob(base64String)
-    const encoded = btoa(decoded)
-
-    return encoded === base64String
-  } catch (error) {
-    return false
-  }
-}
+// Removed legacy base64 validator

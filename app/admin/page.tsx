@@ -81,9 +81,11 @@ export default function AdminPage() {
         const totalRevenue = payments?.reduce((sum, p) => sum + (p.status === "Paid" ? 50 : 0), 0) || 0
         const avgRating = feedback?.length > 0 ? feedback.reduce((sum, f) => sum + f.rating, 0) / feedback.length : 0
 
-        const todayPosters = posters?.filter((p) => p.time?.startsWith(today)).length || 0
+        const todayPosters = posters?.filter((p) => (p.created_at || p.time)?.startsWith(today)).length || 0
         const todayRevenue =
-          payments?.filter((p) => p.time?.startsWith(today) && p.status === "Paid").reduce((sum, p) => sum + 50, 0) || 0
+          payments
+            ?.filter((p) => (p.created_at || "").startsWith(today) && p.status === "Paid")
+            .reduce((sum, p) => sum + 50, 0) || 0
 
         setStats({
           totalPosters,
@@ -111,10 +113,10 @@ export default function AdminPage() {
         // Add recent payments
         payments?.slice(-3).forEach((payment) => {
           activities.push({
-            id: payment.phone_number + payment.time,
+            id: payment.phone_number + (payment.created_at || ""),
             type: "payment",
             description: `Payment ${payment.status.toLowerCase()}: ${payment.phone_number}`,
-            time: payment.time,
+            time: payment.created_at || payment.time,
             status: payment.status === "Paid" ? "success" : payment.status === "Pending" ? "pending" : "failed",
           })
         })
@@ -122,10 +124,10 @@ export default function AdminPage() {
         // Add recent feedback
         feedback?.slice(-3).forEach((fb) => {
           activities.push({
-            id: fb.phone_number + fb.time,
+            id: fb.phone_number + (fb.created_at || ""),
             type: "feedback",
             description: `${fb.rating}⭐ rating: "${fb.comment.substring(0, 50)}..."`,
-            time: fb.time,
+            time: fb.created_at || fb.time,
             status: "success",
           })
         })
@@ -160,7 +162,7 @@ export default function AdminPage() {
 
         setTopTemplates(topTemplatesArray)
       } catch (error) {
-        console.error("Error loading dashboard data:", error)
+        // Silently handle dashboard data load errors to avoid leaking internals
       } finally {
         setIsLoading(false)
       }
@@ -254,7 +256,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
+<div className="min-h-screen site-gradient-bg relative overflow-hidden section-fade-in scroll-fade-in transition-smooth">
       {/* Ultra-futuristic background */}
       <div className="absolute inset-0 overflow-hidden">
         {/* Animated grid */}

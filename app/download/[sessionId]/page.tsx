@@ -6,7 +6,9 @@ import { Card } from "@/components/ui/card"
 import { Sparkles, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
-import { supabase, type PosterTemplate } from "@/lib/supabase"
+import { supabase, type PosterTemplate, getThumbnailUrl, showToast } from "@/lib/supabase"
+import * as Dialog from "@radix-ui/react-dialog"
+import { isValidRating, isValidComment } from "@/lib/validation"
 
 export default function DownloadPage() {
   const params = useParams()
@@ -18,6 +20,8 @@ export default function DownloadPage() {
   const [rating, setRating] = useState(0)
   const [feedback, setFeedback] = useState("")
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestedTemplates, setSuggestedTemplates] = useState<PosterTemplate[]>([])
 
@@ -33,36 +37,83 @@ export default function DownloadPage() {
         // Redirect to payment if not paid
         window.location.href = `/payment/${sessionId}`
       }
+
+      // If poster URL is missing, hydrate from Supabase by session_id
+      if (!parsedData.posterUrl) {
+        hydratePosterFromSupabase(parsedData)
+      }
     }
 
     // Fetch suggested templates
     fetchSuggestedTemplates()
   }, [sessionId])
 
+  const hydratePosterFromSupabase = async (existing: any) => {
+    try {
+      const { data, error } = await supabase
+        .from("generated_posters")
+        .select("image_url, session_id, template_name")
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+
+      if (error) throw error
+      const row = data && data[0]
+      const imageUrl = row?.image_url || existing?.posterUrl || ""
+      const templateName = row?.template_name || existing?.templateName || ""
+      if (imageUrl) {
+        const updated = { ...existing, posterUrl: imageUrl, templateName }
+        setSessionData(updated)
+        try {
+          localStorage.setItem(sessionId, JSON.stringify(updated))
+        } catch {
+          // ignore storage errors
+        }
+      }
+    } catch (err) {
+      // silently ignore hydration errors to avoid noisy logs
+    }
+  }
+
   const fetchSuggestedTemplates = async () => {
     try {
-      const { data, error } = await supabase.from("poster_templates").select("*").limit(3)
+      const { data, error } = await supabase
+        .from("poster_templates")
+        .select("*")
+        .eq("is_active", true)
+        .limit(3)
 
       if (error) throw error
 
       setSuggestedTemplates(data || [])
     } catch (err) {
-      console.error("Error fetching suggested templates:", err)
+      // silently ignore suggestions errors to avoid exposing internals
     }
   }
 
-  const downloadPoster = () => {
-    if (!sessionData?.posterUrl) return
+  const downloadPoster = async () => {
+    if (!sessionData?.posterUrl) {
+      await hydratePosterFromSupabase(sessionData)
+      if (!sessionData?.posterUrl) {
+        showToast("Poster not ready yet. Please try again in a moment")
+        return
+      }
+    }
 
-    // Create download link
-    const link = document.createElement("a")
-    link.href = sessionData.posterUrl
-    link.download = `poster-${sessionData.templateName || "design"}.png`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    // Force download via API to set Content-Disposition and preserve original bytes
+    const apiUrl = `/api/download?url=${encodeURIComponent(sessionData.posterUrl)}&filename=${encodeURIComponent(
+      `poster-${sessionData.templateName || "design"}.png`,
+    )}`
+    try {
+      window.location.href = apiUrl
+      showToast("Preparing your download…", "success")
+    } catch (err) {
+      // avoid logging sensitive browser errors
+      showToast("Failed to start download. Please try again.")
+    }
 
     setHasDownloaded(true)
+    setIsFeedbackOpen(true)
 
     // Show suggestions after download
     setTimeout(() => {
@@ -71,25 +122,40 @@ export default function DownloadPage() {
   }
 
   const submitFeedback = async () => {
-    if (rating === 0 || !sessionData) return
-
+    if (!sessionData) return
+    if (!isValidRating(rating)) {
+      showToast("Please rate the poster from 1 to 5")
+      return
+    }
+    if (!isValidComment(feedback)) {
+      showToast("Comment is too long. Please shorten it")
+      return
+    }
+    setSubmitting(true)
     try {
-      // Save feedback to Supabase
-      const { error } = await supabase.from("feedback").insert({
-        phone_number: sessionData.mpesaNumber || "",
+      const payloadBase: any = {
+        phone_number: sessionData.mpesaNumber || sessionData.phoneNumber || "",
         rating,
-        comment: feedback,
-        time: new Date().toISOString(),
-        template_id: sessionData.templateId,
-      })
-
+        comment: feedback || null,
+        template_name: sessionData.templateName || null,
+      }
+      let { error } = await supabase.from("feedback").insert(payloadBase)
+      if (error) {
+        // Retry without template_name if column is missing
+        const fallback: any = { ...payloadBase }
+        delete fallback.template_name
+        const retry = await supabase.from("feedback").insert(fallback)
+        error = retry.error
+      }
       if (error) throw error
-
       setFeedbackSubmitted(true)
+      setIsFeedbackOpen(false)
+      showToast("We've received your feedback!", "success")
     } catch (err) {
-      console.error("Error submitting feedback:", err)
-      // Still show success for demo purposes
-      setFeedbackSubmitted(true)
+      // avoid logging sensitive feedback errors
+      showToast("Failed to submit feedback. Please try again")
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -97,21 +163,27 @@ export default function DownloadPage() {
     setRating(starRating)
   }
 
-  const renderBase64Image = (base64: string) => {
-    if (!base64) return "/placeholder.svg?height=400&width=600"
-    return base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`
+  const renderPosterSrc = (base64?: string, url?: string) => {
+    // Prefer base64 if provided; otherwise use the generated image URL from Supabase
+    if (base64 && base64.trim().length > 0) {
+      return base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`
+    }
+    if (url && typeof url === "string" && url.length > 0) {
+      return url
+    }
+    return "/placeholder.svg?height=400&width=600"
   }
 
   if (!sessionData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+<div className="min-h-screen site-gradient-bg flex items-center justify-center section-fade-in transition-smooth">
         <Card className="glass p-8 text-center">
           <div className="text-4xl mb-4">🤔</div>
           <h2 className="text-2xl font-bold text-white mb-2 font-space">Session Not Found</h2>
           <p className="text-blue-200 mb-4 font-inter">Looks like your session expired. Let's start over.</p>
           <Link href="/templates">
             <Button className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple">
-              Back to Templates
+              Back to Posters
             </Button>
           </Link>
         </Card>
@@ -120,7 +192,7 @@ export default function DownloadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 relative overflow-hidden">
+<div className="min-h-screen site-gradient-bg relative overflow-hidden section-fade-in scroll-fade-in transition-smooth">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
@@ -153,9 +225,13 @@ export default function DownloadPage() {
       <div className="relative z-10 p-4 md:p-6">
         <div className="max-w-7xl mx-auto flex justify-center items-center">
           <img
-            src={renderBase64Image(sessionData.posterBase64) || "/placeholder.svg"}
+            src={renderPosterSrc(sessionData.posterBase64, sessionData.posterUrl)}
             alt="Generated Poster"
             className="max-w-full max-h-full"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement
+              target.src = "/placeholder.svg?height=400&width=600"
+            }}
           />
         </div>
         <div className="max-w-7xl mx-auto flex justify-center items-center mt-8">
@@ -166,50 +242,70 @@ export default function DownloadPage() {
             Download Poster
           </Button>
         </div>
-        {hasDownloaded && (
-          <div className="max-w-7xl mx-auto flex justify-center items-center mt-8">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
+        {/* Feedback Modal */}
+        <Dialog.Root open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 bg-black/60" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md rounded-xl glass p-6">
+              <Dialog.Title className="text-xl font-bold text-white font-space mb-2">Rate your poster</Dialog.Title>
+              <Dialog.Description className="text-blue-200 font-inter mb-4">
+                Tell us how we did. Your feedback helps improve templates.
+              </Dialog.Description>
+
+              <div className="flex items-center space-x-2 mb-4">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}
                     onClick={() => handleStarClick(star)}
                     className={`text-2xl ${rating >= star ? "text-yellow-500" : "text-gray-300"}`}
+                    aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
                   >
                     ★
                   </button>
                 ))}
               </div>
+
               <input
                 type="text"
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
-                placeholder="Leave your feedback"
-                className="p-2 border border-gray-300 rounded-lg"
+                placeholder="Optional comment"
+                className="w-full p-2 border border-white/20 rounded-lg bg-white/5 text-white font-inter"
               />
-              <Button
-                onClick={submitFeedback}
-                className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple ml-4"
-              >
-                Submit Feedback
-              </Button>
-            </div>
-          </div>
-        )}
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <Dialog.Close asChild>
+                  <Button className="glass text-blue-200">Skip</Button>
+                </Dialog.Close>
+                <Button
+                  onClick={submitFeedback}
+                  disabled={submitting}
+                  className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple"
+                >
+                  {submitting ? "Submitting…" : "Submit"}
+                </Button>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
         {showSuggestions && (
           <div className="max-w-7xl mx-auto flex justify-center items-center mt-8">
             <h2 className="text-2xl font-bold text-white mb-4 font-space">Suggested Templates</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {suggestedTemplates.map((template) => (
-                <Card key={template.id} className="glass p-4 text-center">
+                <Card key={template.template_id} className="glass p-4 text-center">
                   <img
-                    src={renderBase64Image(template.base64) || "/placeholder.svg"}
-                    alt={template.name}
+                    src={getThumbnailUrl(template.thumbnail_path)}
+                    alt={template.template_name}
                     className="max-w-full max-h-full mb-4"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.src = "/placeholder.svg"
+                    }}
                   />
-                  <h3 className="text-xl font-bold text-white mb-2 font-space">{template.name}</h3>
+                  <h3 className="text-xl font-bold text-white mb-2 font-space">{template.template_name}</h3>
                   <p className="text-blue-200 mb-4 font-inter">{template.description}</p>
-                  <Link href={`/templates/${template.id}`}>
+                  <Link href={`/templates/${template.template_id}`}>
                     <Button className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple">
                       View Template
                     </Button>

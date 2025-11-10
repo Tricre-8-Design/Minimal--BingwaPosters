@@ -83,12 +83,15 @@ export default function DashboardContent() {
         if (feedbackError) throw feedbackError
 
         const totalPosters = posters?.length || 0
-        const totalRevenue = payments?.reduce((sum, p) => sum + (p.status === "Paid" ? 50 : 0), 0) || 0
+        // Test mode: fixed amount KSh 1 per paid transaction
+        const totalRevenue = payments?.reduce((sum, p) => sum + (p.status === "Paid" ? 1 : 0), 0) || 0
         const avgRating = feedback?.length > 0 ? feedback.reduce((sum, f) => sum + f.rating, 0) / feedback.length : 0
 
-        const todayPosters = posters?.filter((p) => p.time?.startsWith(today)).length || 0
+        const todayPosters = posters?.filter((p) => (p.created_at || p.time)?.startsWith(today)).length || 0
         const todayRevenue =
-          payments?.filter((p) => p.time?.startsWith(today) && p.status === "Paid").reduce((sum, p) => sum + 50, 0) || 0
+          payments
+            ?.filter((p) => (p.created_at || "").startsWith(today) && p.status === "Paid")
+            .reduce((sum, p) => sum + 1, 0) || 0
 
         setStats({
           totalPosters,
@@ -113,20 +116,20 @@ export default function DashboardContent() {
 
         payments?.slice(-3).forEach((payment) => {
           activities.push({
-            id: payment.phone_number + payment.time,
+            id: payment.phone_number + (payment.created_at || ""),
             type: "payment",
             description: `Payment ${payment.status.toLowerCase()}: ${payment.phone_number}`,
-            time: payment.time,
+            time: payment.created_at || payment.time,
             status: payment.status === "Paid" ? "success" : payment.status === "Pending" ? "pending" : "failed",
           })
         })
 
         feedback?.slice(-3).forEach((fb) => {
           activities.push({
-            id: fb.phone_number + fb.time,
+            id: fb.phone_number + (fb.created_at || ""),
             type: "feedback",
             description: `${fb.rating}⭐ rating: "${fb.comment.substring(0, 50)}..."`,
-            time: fb.time,
+            time: fb.created_at || fb.time,
             status: "success",
           })
         })
@@ -162,7 +165,7 @@ export default function DashboardContent() {
         // Group by date
         const grouped: Record<string, number> = {}
         posters?.forEach((poster) => {
-          const date = poster.time?.split("T")[0] || ""
+          const date = (poster.created_at || poster.time || "").split("T")[0]
           grouped[date] = (grouped[date] || 0) + 1
         })
 
@@ -173,7 +176,7 @@ export default function DashboardContent() {
 
         setDailyData(data)
       } catch (error) {
-        console.error("Error loading dashboard data:", error)
+        // Silently handle dashboard data load errors to prevent leaking details
       } finally {
         setIsLoading(false)
       }
@@ -245,7 +248,7 @@ export default function DashboardContent() {
 
   if (isLoading) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 section-fade-in">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white font-space">Dashboard</h1>
@@ -266,10 +269,10 @@ export default function DashboardContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 section-fade-in scroll-fade-in transition-smooth">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Total Posters with Period Filter */}
-        <Card className="glass p-4 sm:p-6 hover:neon-purple transition-all duration-500 hover:scale-105 animate-in fade-in-0 slide-in-from-top-4 duration-1000">
+        <Card className="glass p-4 sm:p-6 hover:neon-purple hover-subtle transition-smoother animate-fade-in">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -285,7 +288,7 @@ export default function DashboardContent() {
                 <Button
                   key={period}
                   onClick={() => setSelectedPeriod(period.toLowerCase().replace(" ", "-") as any)}
-                  className={`text-xs px-2 py-1 rounded transition-all ${
+                  className={`text-xs px-2 py-1 rounded transition-smooth ${
                     selectedPeriod === period.toLowerCase().replace(" ", "-")
                       ? "bg-purple-500/50 text-white neon-purple"
                       : "bg-white/10 text-blue-200 hover:bg-white/20"
@@ -299,7 +302,7 @@ export default function DashboardContent() {
         </Card>
 
         {/* Revenue with Period Filter */}
-        <Card className="glass p-4 sm:p-6 hover:neon-green transition-all duration-500 hover:scale-105 animate-in fade-in-0 slide-in-from-top-4 duration-1000 delay-100">
+        <Card className="glass p-4 sm:p-6 hover:neon-green hover-subtle transition-smoother animate-fade-in">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -315,7 +318,7 @@ export default function DashboardContent() {
                 <Button
                   key={period}
                   onClick={() => setSelectedPeriod(period.toLowerCase().replace(" ", "-") as any)}
-                  className={`text-xs px-2 py-1 rounded transition-all ${
+                  className={`text-xs px-2 py-1 rounded transition-smooth ${
                     selectedPeriod === period.toLowerCase().replace(" ", "-")
                       ? "bg-green-500/50 text-white neon-green"
                       : "bg-white/10 text-blue-200 hover:bg-white/20"

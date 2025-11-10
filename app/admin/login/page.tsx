@@ -32,15 +32,17 @@ export default function AdminLogin() {
     setError("")
 
     try {
-      // Mock authentication - replace with real Supabase auth
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      if (formData.email === "admin@postergen.com" && formData.password === "admin123") {
-        // Store auth token
-        localStorage.setItem("admin_token", "authenticated")
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email, password: formData.password }),
+      })
+      const data = await res.json().catch(() => ({ success: false }))
+      if (res.ok && data?.success) {
         router.push("/admin")
       } else {
-        setError("Invalid credentials. Please try again.")
+        const msg = data?.error || "Invalid credentials"
+        setError(msg)
       }
     } catch (err) {
       setError("Login failed. Please try again.")
@@ -50,7 +52,7 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-screen site-gradient-bg relative overflow-hidden flex items-center justify-center section-fade-in transition-smooth">
       {/* Ultra-futuristic background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(147,51,234,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(147,51,234,0.1)_1px,transparent_1px)] bg-[size:50px_50px] animate-pulse"></div>
@@ -60,7 +62,7 @@ export default function AdminLogin() {
       </div>
 
       {/* Login Card */}
-      <Card className="glass p-8 w-full max-w-md animate-in fade-in-0 zoom-in-95 duration-1000 relative z-10">
+      <Card className="glass p-8 w-full max-w-md animate-fade-in transition-smooth relative z-10">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-gradient-to-r from-purple-400 to-blue-400 rounded-xl flex items-center justify-center mx-auto mb-4 neon-purple animate-pulse">
             <Sparkles className="w-8 h-8 text-white" />
@@ -70,7 +72,7 @@ export default function AdminLogin() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-500/20 border border-red-400/30 rounded-lg animate-in fade-in-0 slide-in-from-top-4 duration-500">
+          <div className="mb-6 p-4 bg-red-500/20 border border-red-400/30 rounded-lg animate-fade-in transition-smooth">
             <p className="text-red-400 text-sm font-inter">{error}</p>
           </div>
         )}
@@ -86,7 +88,7 @@ export default function AdminLogin() {
               value={formData.email}
               onChange={(e) => handleInputChange("email", e.target.value)}
               required
-              placeholder="admin@postergen.com"
+              placeholder="Enter your email"
               className="glass text-white placeholder-blue-300 border-white/20 focus:border-purple-400 focus:neon-purple transition-all duration-300 font-inter"
             />
           </div>

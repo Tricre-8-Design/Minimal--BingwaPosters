@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Trash2, Plus, Edit, Save, X, Upload, ImageIcon } from "lucide-react"
-import { supabaseAdmin, type PosterTemplate, showToast, fileToBase64, renderThumbnail } from "@/lib/supabase"
+import { supabaseAdmin, type PosterTemplate, showToast, getThumbnailUrl } from "@/lib/supabase"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface FieldRequirement {
@@ -34,9 +34,9 @@ export default function AdminTemplates() {
     template_id: "",
     template_uuid: "",
     price: 0,
-    description: "",
+    tag: "",
     category: "",
-    thumbnail: "",
+    thumbnail_path: "",
     fields_required: [] as FieldRequirement[],
   })
 
@@ -51,14 +51,14 @@ export default function AdminTemplates() {
 
       if (error) throw error
 
-      console.log("📋 Fetched templates for admin:", data?.length || 0)
+      // Templates fetched; avoid console logging
       data?.forEach((template) => {
-        console.log(`- ${template.template_name}: thumbnail length = ${template.thumbnail?.length || 0}`)
+        // Avoid logging template details to console
       })
 
       setTemplates(data || [])
     } catch (error: any) {
-      console.error("Error fetching templates:", error)
+      // Silent failure; surface via toast only
       showToast(`Failed to fetch templates: ${error.message}`, "error")
     } finally {
       setLoading(false)
@@ -67,7 +67,7 @@ export default function AdminTemplates() {
 
   const handleSave = async () => {
     try {
-      if (!formData.template_name || !formData.template_id || !formData.template_uuid) {
+      if (!formData.template_name || !formData.template_id || !formData.template_uuid || !formData.category) {
         showToast("Please fill in all required fields", "error")
         return
       }
@@ -77,7 +77,7 @@ export default function AdminTemplates() {
         fields_required: formData.fields_required,
       }
 
-      console.log("💾 Saving template with thumbnail length:", templateData.thumbnail?.length || 0)
+      // Saving template; no console output
 
       if (editingTemplate) {
         // Update existing template
@@ -90,7 +90,9 @@ export default function AdminTemplates() {
         showToast("Template updated successfully!", "success")
       } else {
         // Create new template
-        const { error } = await supabaseAdmin.from("poster_templates").insert([templateData])
+        const { error } = await supabaseAdmin
+          .from("poster_templates")
+          .insert([{ ...templateData, is_active: true }])
 
         if (error) throw error
         showToast("Template created successfully!", "success")
@@ -100,7 +102,7 @@ export default function AdminTemplates() {
       resetForm()
       fetchTemplates()
     } catch (error: any) {
-      console.error("Error saving template:", error)
+      // Silent failure; surface via toast only
       showToast(`Failed to save template: ${error.message}`, "error")
     }
   }
@@ -115,8 +117,41 @@ export default function AdminTemplates() {
       showToast("Template deleted successfully!", "success")
       fetchTemplates()
     } catch (error: any) {
-      console.error("Error deleting template:", error)
+      // Silent failure; surface via toast only
       showToast(`Failed to delete template: ${error.message}`, "error")
+    }
+  }
+
+  // Toggle activation state with confirmation on deactivation
+  const handleToggleActive = async (template: PosterTemplate) => {
+    try {
+      const currentState = !!template.is_active
+      if (currentState) {
+        const confirmed = window.confirm(
+          "Are you sure you want to deactivate this template? It will be hidden from all users.",
+        )
+        if (!confirmed) return
+      }
+
+      const { error } = await supabaseAdmin
+        .from("poster_templates")
+        .update({ is_active: !currentState })
+        .eq("template_id", template.template_id)
+
+      if (error) throw error
+
+      // Update local state so UI reflects immediately
+      setTemplates((prev) =>
+        prev.map((t) => (t.template_id === template.template_id ? { ...t, is_active: !currentState } : t)),
+      )
+
+      showToast(
+        !currentState ? "Template activated and visible to users." : "Template deactivated and hidden from users.",
+        "success",
+      )
+    } catch (err: any) {
+      // Silent failure; surface via toast only
+      showToast(`Failed to update active state: ${err.message}`, "error")
     }
   }
 
@@ -127,9 +162,9 @@ export default function AdminTemplates() {
       template_id: template.template_id,
       template_uuid: template.template_uuid,
       price: template.price,
-      description: template.description,
+      tag: template.tag || "",
       category: template.category,
-      thumbnail: template.thumbnail,
+      thumbnail_path: template.thumbnail_path || "",
       fields_required: template.fields_required || [],
     })
     setIsCreating(true)
@@ -141,9 +176,9 @@ export default function AdminTemplates() {
       template_id: "",
       template_uuid: "",
       price: 0,
-      description: "",
+      tag: "",
       category: "",
-      thumbnail: "",
+      thumbnail_path: "",
       fields_required: [],
     })
     setEditingTemplate(null)
@@ -189,20 +224,44 @@ export default function AdminTemplates() {
 
     try {
       setUploadingThumbnail(true)
-      console.log("📸 Converting image to base64...")
+      const ext = file.name.split(".").pop() || "png"
+      const fileName = `${formData.template_id || "new"}-${Date.now()}.${ext}`
 
-      const base64 = await fileToBase64(file)
-      console.log("✅ Base64 conversion complete, length:", base64.length)
+      const { data, error } = await supabaseAdmin.storage
+        .from("templates-thumbnails")
+        .upload(`thumbnails/${fileName}`, file)
+
+      if (error) {
+        // Silent failure; surface via toast only
+        showToast("Thumbnail upload failed.", "error")
+        return
+      }
+
+      const uploadedPath = data.path
+
+      if (editingTemplate?.template_id) {
+        const { error: dbError } = await supabaseAdmin
+          .from("poster_templates")
+          .update({ thumbnail_path: uploadedPath })
+          .eq("template_id", editingTemplate.template_id)
+
+        if (dbError) {
+          // Silent failure; surface via toast only
+          showToast("Failed to save thumbnail path to template.", "error")
+        } else {
+          showToast("Thumbnail saved and linked to template.", "success")
+        }
+      } else {
+        showToast("Thumbnail uploaded. It will be saved when you create the template.", "success")
+      }
 
       setFormData((prev) => ({
         ...prev,
-        thumbnail: base64,
+        thumbnail_path: uploadedPath,
       }))
-
-      showToast("Thumbnail uploaded successfully!", "success")
-    } catch (error) {
-      console.error("Error uploading thumbnail:", error)
-      showToast("Failed to upload thumbnail", "error")
+    } catch (error: any) {
+      // Silent failure; surface via toast only
+      showToast("Thumbnail upload failed.", "error")
     } finally {
       setUploadingThumbnail(false)
     }
@@ -211,7 +270,7 @@ export default function AdminTemplates() {
   const clearThumbnail = () => {
     setFormData((prev) => ({
       ...prev,
-      thumbnail: "",
+      thumbnail_path: "",
     }))
   }
 
@@ -309,7 +368,6 @@ export default function AdminTemplates() {
                     <SelectItem value="Minutes">Minutes</SelectItem>
                     <SelectItem value="SMS">SMS</SelectItem>
                     <SelectItem value="Special Offers">Special Offers</SelectItem>
-                    <SelectItem value="Announcements">Announcements</SelectItem>
                     <SelectItem value="Others">Others</SelectItem>
                   </SelectContent>
                 </Select>
@@ -317,15 +375,14 @@ export default function AdminTemplates() {
             </div>
 
             <div>
-              <Label htmlFor="description" className="text-gray-700 font-medium">
-                Description
+              <Label htmlFor="tag" className="text-gray-700 font-medium">
+                Tag
               </Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Describe this template..."
-                rows={3}
+              <Input
+                id="tag"
+                value={formData.tag}
+                onChange={(e) => setFormData((prev) => ({ ...prev, tag: e.target.value }))}
+                placeholder="Short tag, e.g., Promo, New, Hot"
                 className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
@@ -368,7 +425,7 @@ export default function AdminTemplates() {
                     </Button>
                   </label>
 
-                  {formData.thumbnail && (
+                  {formData.thumbnail_path && (
                     <Button
                       type="button"
                       variant="outline"
@@ -382,11 +439,11 @@ export default function AdminTemplates() {
                 </div>
 
                 {/* Thumbnail Preview */}
-                {formData.thumbnail && (
+                {formData.thumbnail_path && (
                   <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                     <div className="flex items-start gap-4">
                       <img
-                        src={renderThumbnail(formData.thumbnail, "Preview") || "/placeholder.svg"}
+                        src={getThumbnailUrl(formData.thumbnail_path)}
                         alt="Thumbnail preview"
                         className="w-32 h-24 object-cover rounded border border-gray-300"
                         onError={(e) => {
@@ -396,8 +453,8 @@ export default function AdminTemplates() {
                       />
                       <div className="flex-1 text-sm text-gray-600">
                         <p className="font-medium text-gray-800 mb-1">Thumbnail Preview</p>
-                        <p>Size: {Math.round((formData.thumbnail.length * 0.75) / 1024)} KB</p>
-                        <p>Format: Base64 encoded</p>
+                        <p>Path: {formData.thumbnail_path}</p>
+                        <p>Storage: Supabase public bucket</p>
                         <p className="text-green-600 mt-1">✅ Ready to save</p>
                       </div>
                     </div>
@@ -514,7 +571,9 @@ export default function AdminTemplates() {
             <CardHeader className="bg-gradient-to-r from-sky-600 to-rose-500 text-white rounded-t-md p-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <CardTitle className="text-white text-lg">{template.template_name}</CardTitle>
+                  <CardTitle className="text-white text-2xl font-bold tracking-tight leading-tight">
+                    {template.template_name}
+                  </CardTitle>
                   <p className="text-sm text-gray-100 mt-1">ID: {template.template_id}</p>
                   <p className="text-sm text-gray-100">UUID: {template.template_uuid}</p>
                 </div>
@@ -545,11 +604,11 @@ export default function AdminTemplates() {
                     {/* Thumbnail Display */}
                     <div className="relative">
                       <img
-                        src={renderThumbnail(template.thumbnail, template.template_name) || "/placeholder.svg"}
+                        src={getThumbnailUrl(template.thumbnail_path || "")}
                         alt={template.template_name}
-                        className="w-full h-32 object-cover rounded mb-3 border border-gray-200"
+                        className="w-full max-h-48 object-contain rounded mb-3 border border-gray-200 bg-white"
                         onError={(e) => {
-                          console.error(`Failed to load thumbnail for ${template.template_name}`)
+                          // Silent image load failure; fallback to placeholder
                           const target = e.target as HTMLImageElement
                           target.src = `/placeholder.svg?height=128&width=200&text=${encodeURIComponent(template.template_name)}`
                         }}
@@ -557,10 +616,10 @@ export default function AdminTemplates() {
 
                       {/* Thumbnail Status Indicator */}
                       <div className="absolute top-2 right-2">
-                        {template.thumbnail ? (
+                        {template.thumbnail_path ? (
                           <div className="bg-green-500 text-white px-2 py-1 rounded-full text-xs flex items-center">
                             <ImageIcon className="w-3 h-3 mr-1" />
-                            {Math.round((template.thumbnail.length * 0.75) / 1024)}KB
+                            Linked
                           </div>
                         ) : (
                           <div className="bg-gray-500 text-white px-2 py-1 rounded-full text-xs">No Image</div>
@@ -568,33 +627,7 @@ export default function AdminTemplates() {
                       </div>
                     </div>
 
-                    {/* Template Overview */}
-                    <div className="text-md font-semibold text-gray-800">Template Overview</div>
-                    <p className="text-sm text-gray-700 mb-2">{template.description}</p>
-
-                    {/* Feature Badges */}
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      <Badge variant="secondary" className="bg-purple-100 text-purple-800">
-                        High Quality
-                      </Badge>
-                      <Badge variant="secondary" className="bg-green-100 text-green-800">
-                        Customizable
-                      </Badge>
-                      <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-                        Instant Download
-                      </Badge>
-                    </div>
-
-                    {/* Progress Bar (dummy data) */}
-                    <div className="mb-2">
-                      <div className="flex justify-between text-xs text-gray-600 mb-1">
-                        <span>Usage: 2.5GB / 5GB</span>
-                        <span>50%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-blue-500 h-2 rounded-full" style={{ width: "50%" }}></div>
-                      </div>
-                    </div>
+                    {/* Removed overview, badges, and progress bar per admin UI update */}
 
                     <div className="flex justify-between items-center mb-2">
                       <Badge className="bg-blue-100 text-blue-800">{template.category}</Badge>
@@ -606,13 +639,30 @@ export default function AdminTemplates() {
                 <TooltipContent>
                   <p className="text-sm">Click to edit or delete this template.</p>
                   <p className="text-xs text-gray-400">Template ID: {template.template_id}</p>
-                  <p className="text-xs text-gray-400">
-                    Thumbnail:{" "}
-                    {template.thumbnail ? `${Math.round((template.thumbnail.length * 0.75) / 1024)}KB` : "None"}
-                  </p>
+                  <p className="text-xs text-gray-400">Thumbnail: {template.thumbnail_path ? template.thumbnail_path : "None"}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {/* Active toggle */}
+            <div className="flex justify-end items-center mt-2 px-4 pb-4">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={template.is_active}
+                onClick={() => handleToggleActive(template)}
+                className={`relative inline-flex items-center h-7 px-2 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                  template.is_active ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700"
+                }`}
+                title={template.is_active ? "Active" : "Inactive"}
+              >
+                <span
+                  className={`absolute left-1 top-1 w-5 h-5 rounded-full bg-white shadow transform transition-transform ${
+                    template.is_active ? "translate-x-6" : "translate-x-0"
+                  }`}
+                />
+                <span className="text-xs font-medium ml-8">{template.is_active ? "Active" : "Inactive"}</span>
+              </button>
+            </div>
           </Card>
         ))}
       </div>

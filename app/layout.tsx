@@ -16,7 +16,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${poppins.variable}`}>
-      <body className="font-inter antialiased">{children}</body>
+      <body className="font-inter antialiased site-gradient-bg min-h-screen relative overflow-x-hidden">
+        {/* Global content wrapper with consistent fade-in */}
+        <div className="section-fade-in">{children}</div>
+      </body>
     </html>
   )
 }
