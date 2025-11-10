@@ -1,20 +1,32 @@
 import { createBrowserClient } from "@supabase/ssr"
 
-// Environment variables - these need to be set in your project
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Lazy Supabase client to avoid build-time env access
+// Creates the browser client only when first used at runtime.
+let cachedClient: ReturnType<typeof createBrowserClient> | null = null
 
-// Validate environment variables
-if (!supabaseUrl) {
-  throw new Error("❌ NEXT_PUBLIC_SUPABASE_URL is required")
+function ensureClient(): ReturnType<typeof createBrowserClient> {
+  if (cachedClient) return cachedClient
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!url || !anon) {
+    // Throw only when actually used at runtime; avoids build-time failures
+    throw new Error("❌ NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is missing")
+  }
+  cachedClient = createBrowserClient(url, anon)
+  return cachedClient
 }
 
-if (!supabaseAnonKey) {
-  throw new Error("❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is required")
-}
-
-// Create Supabase client for browser
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
+// Proxy exposes the same interface while deferring client creation until used
+export const supabase = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      const client = ensureClient() as any
+      const value = client[prop]
+      return typeof value === "function" ? value.bind(client) : value
+    },
+  },
+) as ReturnType<typeof createBrowserClient>
 
 // Alias for legacy imports – uses the same anon client (no service-role key required)
 export const supabaseAdmin = supabase
