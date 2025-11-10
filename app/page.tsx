@@ -23,7 +23,10 @@ import {
   X,
 } from "lucide-react"
 import Link from "next/link"
-import { supabase, type PosterTemplate, showToast, renderThumbnail, verifyThumbnailData } from "@/lib/supabase"
+import { supabase, type PosterTemplate, getThumbnailUrl } from "@/lib/supabase"
+import { Badge } from "@/components/ui/badge"
+import { friendlyToastError } from "@/lib/client-errors"
+import HeadlineRotator from "@/components/ui/headline-rotator"
 
 export default function HomePage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -35,13 +38,14 @@ export default function HomePage() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState("")
   const [previewTemplate, setPreviewTemplate] = useState<PosterTemplate | null>(null)
+  const [updatedNotice, setUpdatedNotice] = useState(false)
 
   const categories = [
     { id: "all", name: "All Templates", icon: Grid3X3, count: 0 },
     { id: "Data", name: "Data", icon: Smartphone, count: 0 },
     { id: "SMS", name: "SMS", icon: Coffee, count: 0 },
     { id: "Minutes", name: "Minutes", icon: Car, count: 0 },
-    { id: "Announcements", name: "Announcements", icon: Briefcase, count: 0 },
+    { id: "Special Offers", name: "Special Offers", icon: Briefcase, count: 0 },
     { id: "Others", name: "Others", icon: Home, count: 0 },
   ]
 
@@ -49,47 +53,44 @@ export default function HomePage() {
   useEffect(() => {
     fetchTemplates()
 
-    // Verify thumbnail data on component mount
-    verifyThumbnailData()
-
     // Set up real-time subscription for template changes
     const subscription = supabase
       .channel("template-changes")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "poster_templates",
+        { event: "INSERT", schema: "public", table: "poster_templates" },
+        () => {
+          setUpdatedNotice(true)
+          setTimeout(() => setUpdatedNotice(false), 3000)
+          fetchTemplates(false)
         },
-        (payload) => {
-          console.log("Real-time template change detected:", payload)
-
-          // Show notification for real-time updates
-          if (payload.eventType === "INSERT") {
-            showToast(`New template "${payload.new?.template_name}" added!`, "success")
-          } else if (payload.eventType === "UPDATE") {
-            showToast(`Template "${payload.new?.template_name}" updated!`, "success")
-          } else if (payload.eventType === "DELETE") {
-            showToast("Template deleted", "success")
-          }
-
-          // Refresh templates without loading state
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "poster_templates" },
+        () => {
+          setUpdatedNotice(true)
+          setTimeout(() => setUpdatedNotice(false), 3000)
+          fetchTemplates(false)
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "poster_templates" },
+        () => {
+          setUpdatedNotice(true)
+          setTimeout(() => setUpdatedNotice(false), 3000)
           fetchTemplates(false)
         },
       )
       .subscribe((status) => {
-        console.log("Real-time subscription status:", status)
-        if (status === "SUBSCRIBED") {
-          console.log("Real-time updates enabled for templates")
-        } else if (status === "CHANNEL_ERROR") {
-          console.error("Real-time subscription failed")
-          showToast("Real-time updates unavailable", "error")
+        if (status === "CHANNEL_ERROR") {
+          // Subtle notice instead of a toast
+          setUpdatedNotice(false)
         }
       })
 
     return () => {
-      console.log("Cleaning up real-time subscription")
       subscription.unsubscribe()
     }
   }, [])
@@ -99,54 +100,49 @@ export default function HomePage() {
       if (showLoader) setLoading(true)
       setError("")
 
-      console.log("Fetching templates from poster_templates table...")
+      // Fetch templates from Supabase
 
-      const { data, error } = await supabase.from("poster_templates").select("*").order("template_name")
+      const { data, error } = await supabase
+        .from("poster_templates")
+        .select("*")
+        .eq("is_active", true)
+        .order("template_name")
 
       if (error) {
-        console.error("Supabase error:", error)
-        throw new Error(`Database error: ${error.message}`)
+        throw new Error("We couldn’t load templates from the database.")
       }
 
-      console.log("Fetched templates:", data)
-
-      // Log thumbnail data for debugging
-      data?.forEach((template) => {
-        console.log(`Template: ${template.template_name}`)
-        console.log(`- Has thumbnail: ${!!template.thumbnail}`)
-        console.log(`- Thumbnail length: ${template.thumbnail?.length || 0}`)
-        if (template.thumbnail && template.thumbnail.length < 100) {
-          console.log(`- Thumbnail preview: ${template.thumbnail.substring(0, 50)}...`)
-        }
-      })
+      // Avoid noisy debug logging in UI; set templates directly
 
       setTemplates(data || [])
 
-      if (data && data.length > 0 && showLoader) {
-        showToast(`Loaded ${data.length} templates successfully!`, "success")
-      }
+      // Keep success toasts minimal; no popouts here
     } catch (err: any) {
-      console.error("Error fetching templates:", err)
-      const errorMessage = err.message || "Failed to load templates. Please check your database connection."
+      const errorMessage = "Couldn’t load templates — please try again."
       setError(errorMessage)
-      showToast(errorMessage, "error")
+      friendlyToastError(undefined, errorMessage)
     } finally {
       if (showLoader) setLoading(false)
     }
   }
 
+  const [recentlyRefreshed, setRecentlyRefreshed] = useState(false)
   const refreshTemplates = async () => {
     setRefreshing(true)
     await fetchTemplates(false)
     setRefreshing(false)
-    showToast("Templates refreshed!", "success")
+    // Replace noisy toast with subtle badge for a few seconds
+    setRecentlyRefreshed(true)
+    setTimeout(() => setRecentlyRefreshed(false), 3000)
   }
 
   // Filter templates based on search and category
   const filteredTemplates = templates.filter((template) => {
+    const term = searchTerm.toLowerCase()
     const matchesSearch =
-      template.template_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      template.description.toLowerCase().includes(searchTerm.toLowerCase())
+      template.template_name.toLowerCase().includes(term) ||
+      (template.tag ?? "").toLowerCase().includes(term) ||
+      template.category.toLowerCase().includes(term)
 
     const matchesCategory = selectedCategory === "all" || template.category === selectedCategory
 
@@ -177,11 +173,19 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+<div className="min-h-screen site-gradient-bg flex items-center justify-center section-fade-in transition-smooth">
         <div className="text-center space-y-4">
-          <Loader2 className="w-12 h-12 text-purple-400 animate-spin mx-auto" />
+          {/* Ripple loader for template loading */}
+          <div className="relative mx-auto" style={{ width: 120, height: 120 }} aria-label="Loading templates">
+            <span className="absolute inset-0 rounded-full border-4 border-purple-400/80 animate-[ping_1.6s_ease-out_infinite]" />
+            <span className="absolute inset-0 rounded-full border-4 border-blue-400/80 animate-[ping_1.6s_ease-out_infinite]" style={{ transform: 'scale(0.7)' }} />
+            <span className="absolute inset-0 rounded-full bg-purple-500/80" style={{ width: 16, height: 16, top: '50%', left: '50%', transform: 'translate(-50%, -50%)', borderRadius: 9999 }} />
+          </div>
           <p className="text-white font-space text-xl">Loading templates...</p>
           <p className="text-blue-200 font-inter text-sm">Connecting to Template Store...</p>
+          {updatedNotice && (
+            <span className="mt-2 inline-block rounded-full bg-white/10 px-3 py-1 text-xs text-blue-100">Updated</span>
+          )}
         </div>
       </div>
     )
@@ -189,10 +193,10 @@ export default function HomePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+<div className="min-h-screen site-gradient-bg flex items-center justify-center section-fade-in transition-smooth">
         <Card className="glass p-8 text-center max-w-md">
           <div className="text-4xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-white mb-2 font-space">Database Connection Error</h2>
+          <h2 className="text-2xl font-bold text-white mb-2 font-space">Can’t load templates</h2>
           <p className="text-blue-200 mb-4 font-inter">{error}</p>
           <div className="space-y-2">
             <Button
@@ -203,7 +207,7 @@ export default function HomePage() {
               Try Again
             </Button>
             <p className="text-xs text-blue-300 font-inter">
-              Make sure the 'poster_templates' table exists in your Supabase database
+              Ebu check your internet connection as we check on our side.
             </p>
           </div>
         </Card>
@@ -212,7 +216,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 relative overflow-hidden">
+<div className="min-h-screen site-gradient-bg relative overflow-hidden section-fade-in scroll-fade-in transition-smooth">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
@@ -227,7 +231,7 @@ export default function HomePage() {
             <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-blue-400 rounded-lg flex items-center justify-center neon-purple">
               <Sparkles className="w-5 h-5 text-white animate-pulse" />
             </div>
-            <span className="text-white font-bold text-xl font-space">PosterGen</span>
+            <span className="text-white font-bold text-xl font-space">Bingwa Posters</span>
           </div>
 
           <Button
@@ -238,15 +242,27 @@ export default function HomePage() {
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
+          {recentlyRefreshed && (
+            <Badge variant="outline" className="ml-3 bg-white/10 text-white border-white/20">
+              Updated
+            </Badge>
+          )}
         </div>
       </nav>
 
       {/* Header Section */}
       <section className="relative z-10 px-4 md:px-6 py-8">
         <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 animate-in fade-in-0 slide-in-from-top-4 duration-1000 font-space">
-            Choose Your Vibe
-          </h1>
+          <HeadlineRotator
+            phrases={[
+              "Choose Your Vibe",
+              "Design posters fast",
+              "No designer? No problem",
+              "Brand-safe. Pixel-perfect.",
+            ]}
+            intervalMs={4000}
+            className="text-4xl md:text-5xl mb-4 font-space"
+          />
           <p className="text-xl text-blue-200 mb-8 animate-in fade-in-0 slide-in-from-top-6 duration-1000 delay-200 font-inter">
             Pick a template that matches your need. Kila mtu ana style yake!
           </p>
@@ -272,25 +288,37 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             {/* Category Filters */}
-            <div className="flex flex-wrap gap-2">
-              {updatedCategories.map((category, index) => {
-                const Icon = category.icon
-                return (
-                  <Button
-                    key={category.id}
-                    onClick={() => setSelectedCategory(category.id)}
-                    className={`glass btn-interactive transition-all duration-300 animate-in fade-in-0 slide-in-from-left-4 duration-1000 ${
-                      selectedCategory === category.id
-                        ? "neon-purple bg-purple-500/30 text-white"
-                        : "text-blue-200 hover:text-white hover:neon-blue"
-                    }`}
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    <Icon className="w-4 h-4 mr-2" />
-                    {category.name} ({category.count})
-                  </Button>
-                )
-              })}
+            <div className="relative w-full md:w-auto">
+              <div className="flex flex-wrap md:flex-nowrap gap-2 overflow-x-auto no-scrollbar py-2 px-1 rounded-xl bg-white/5 backdrop-blur-sm shadow-soft">
+                {updatedCategories.map((category, index) => {
+                  const Icon = category.icon
+                  const isActive = selectedCategory === category.id
+                  return (
+                    <button
+                      key={category.id}
+                      onClick={() => setSelectedCategory(category.id)}
+                      className={`relative inline-flex items-center rounded-full px-3 py-1.5 text-sm transition-all duration-300 ease-in-out ${
+                        isActive
+                          ? "text-white bg-[hsla(0,0%,100%,0.12)] shadow-soft"
+                          : "text-blue-200 hover:text-white hover:bg-[hsla(0,0%,100%,0.08)]"
+                      }`}
+                      style={{ animationDelay: `${index * 100}ms` }}
+                    >
+                      <Icon className="w-4 h-4 mr-2" />
+                      {category.name}
+                      <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        isActive ? "bg-emerald-500/90 text-white" : "bg-white/10 text-blue-200"
+                      }`}>{category.count}</span>
+                      {/* Animated underline */}
+                      <span
+                        className={`absolute left-3 right-3 -bottom-0.5 h-[2px] rounded-full transition-all duration-300 ${
+                          isActive ? "bg-gradient-to-r from-[hsl(var(--accent-blue))] to-[hsl(var(--accent-green))] opacity-100" : "opacity-0"
+                        }`}
+                      />
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             {/* View Mode Toggle */}
@@ -359,165 +387,88 @@ export default function HomePage() {
                   <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
                   Refresh
                 </Button>
+                {recentlyRefreshed && (
+                  <Badge variant="outline" className="ml-3 bg-white/10 text-white border-white/20">
+                    Updated
+                  </Badge>
+                )}
               </div>
             </Card>
           ) : (
             <div
               className={`grid gap-6 ${
-                viewMode === "grid" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"
+                viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-1"
               }`}
             >
               {filteredTemplates.map((template, index) => (
-                <Card
-                  key={template.template_id}
-                  className="glass p-6 hover:neon-purple transition-all duration-500 hover:scale-105 group cursor-pointer animate-in fade-in-0 slide-in-from-bottom-4 duration-1000"
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                >
-                  {/* Template Image */}
-                  <div className="relative mb-4 overflow-hidden rounded-lg">
-                    <img
-                      src={(() => {
-                        // Enhanced thumbnail rendering with debugging
-                        const thumbnail = template.thumbnail
-                        console.log(`Rendering thumbnail for ${template.template_name || "/placeholder.svg"}:`, {
-                          hasThumbnail: !!thumbnail,
-                          thumbnailLength: thumbnail?.length || 0,
-                          thumbnailType: typeof thumbnail,
-                          thumbnailPreview: thumbnail ? thumbnail.substring(0, 50) + "..." : "null",
-                        })
+              <Card
+                key={template.template_id}
+                className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl overflow-hidden transition-all duration-300 group cursor-pointer animate-in fade-in-0 slide-in-from-bottom-4 duration-1000 hover:scale-[1.02] hover:shadow-soft"
+                style={{ animationDelay: `${index * 0.1}s` }}
+              >
+                {/* Top Section: Thumbnail */}
+                <div className="relative w-full bg-white">
+                  <img
+                    src={getThumbnailUrl(template.thumbnail_path ?? undefined)}
+                    alt={template.template_name}
+                    className="w-full h-auto object-contain rounded-t-xl border border-gray-200"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.src = `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(template.template_name)}`
+                    }}
+                  />
 
-                        if (!thumbnail) {
-                          console.log(`No thumbnail data for ${template.template_name}, using placeholder`)
-                          return `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(template.template_name)}`
-                        }
+                  {/* Template Tag Overlay */}
+                  {template.tag && (
+                    <span className="absolute top-2 right-2 bg-[hsl(var(--accent-blue))] text-white text-xs px-2 py-1 rounded-full font-medium shadow-soft">
+                      {template.tag}
+                    </span>
+                  )}
 
-                        // If it's already a complete URL, return as is
-                        if (
-                          thumbnail.startsWith("http") ||
-                          thumbnail.startsWith("data:") ||
-                          thumbnail.startsWith("blob:") ||
-                          thumbnail.startsWith("/")
-                        ) {
-                          console.log(`Using direct URL for ${template.template_name}`)
-                          return thumbnail
-                        }
-
-                        // Try to handle as base64
-                        try {
-                          // Remove any whitespace and newlines
-                          const cleanThumbnail = thumbnail.replace(/\s/g, "")
-
-                          // Test if it's valid base64
-                          atob(cleanThumbnail)
-                          const dataUrl = `data:image/png;base64,${cleanThumbnail}`
-                          console.log(`Successfully converted base64 for ${template.template_name}`)
-                          return dataUrl
-                        } catch (error) {
-                          console.error(`Invalid base64 data for ${template.template_name}:`, error)
-                          return `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(template.template_name)}`
-                        }
-                      })()}
-                      alt={template.template_name}
-                      className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500"
-                      onError={(e) => {
-                        console.error(`Image failed to load for ${template.template_name}`)
-                        console.error("Current src:", (e.target as HTMLImageElement).src)
-                        console.error("Template data:", {
-                          template_id: template.template_id,
-                          thumbnail_length: template.thumbnail?.length || 0,
-                          thumbnail_preview: template.thumbnail ? template.thumbnail.substring(0, 100) : "null",
-                        })
-
-                        const target = e.target as HTMLImageElement
-                        // Fallback to a simple placeholder
-                        target.src = `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(template.template_name)}`
-                      }}
-                      onLoad={() => {
-                        console.log(`✅ Thumbnail loaded successfully for ${template.template_name}`)
-                      }}
-                    />
-
-                    {/* Category Badge */}
-                    <div className="absolute top-2 left-2">
-                      <span className="px-2 py-1 text-xs bg-purple-500/80 text-white rounded-full font-inter">
-                        {template.category}
-                      </span>
-                    </div>
-
-                    {/* Favorite Button */}
-                    <Button
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleFavorite(template.template_id)
-                      }}
-                      className={`absolute top-2 right-2 glass btn-interactive transition-all duration-300 ${
-                        favorites.has(template.template_id)
-                          ? "neon-purple text-pink-400"
-                          : "text-white hover:text-pink-400"
-                      }`}
-                    >
-                      <Heart className={`w-4 h-4 ${favorites.has(template.template_id) ? "fill-current" : ""}`} />
-                    </Button>
-
-                    {/* Overlay on Hover */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-4">
-                      <Button
-                        onClick={() => handlePreview(template)}
-                        className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 btn-interactive neon-blue"
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Preview
-                      </Button>
+                  {/* Hover View Overlay */}
+                  <div
+                    className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center cursor-pointer"
+                    onClick={() => handlePreview(template)}
+                  >
+                    <div className="px-4 py-2 rounded-full bg-white/80 text-neutral-800 text-sm font-medium shadow-soft">
+                      View Poster
                     </div>
                   </div>
+                </div>
 
-                  {/* Template Info */}
-                  <div className="space-y-3">
-                    {/* Name */}
-                    <h3 className="text-xl font-bold text-white group-hover:text-purple-300 transition-colors duration-300 font-space">
+                {/* Bottom Section: Info Panel */}
+                <div className="p-3 bg-gradient-to-b from-blue-900/80 to-purple-900/80 space-y-2 rounded-b-xl">
+                  {/* Name and Price */}
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-semibold text-base text-white font-space line-clamp-1">
                       {template.template_name}
                     </h3>
-
-                    {/* Description */}
-                    <p className="text-sm text-blue-200 font-inter line-clamp-2">{template.description}</p>
-
-                    {/* Fields preview */}
-                    <div className="flex flex-wrap gap-1">
-                      {template.fields_required?.slice(0, 3).map((field) => (
-                        <span
-                          key={field.name}
-                          className="px-2 py-1 text-xs bg-white/10 text-blue-200 rounded-full font-inter"
-                        >
-                          {field.label}
-                        </span>
-                      ))}
-
-                      {template.fields_required && template.fields_required.length > 3 && (
-                        <span className="px-2 py-1 text-xs bg-white/10 text-blue-200 rounded-full font-inter">
-                          +{template.fields_required.length - 3} more
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => handlePreview(template)}
-                        className="flex-1 glass btn-interactive text-white hover:neon-blue font-space"
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Preview
-                      </Button>
-                      <Link href={`/create/${template.template_id}`} className="flex-1">
-                        <Button className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 btn-interactive neon-purple font-space">
-                          <Palette className="w-4 h-4 mr-2" />
-                          Customize
-                        </Button>
-                      </Link>
-                    </div>
+                    <span className="px-2 py-1 bg-emerald-500 text-white text-xs font-medium rounded-full whitespace-nowrap shadow-soft">
+                      KSh {template.price}
+                    </span>
                   </div>
-                </Card>
+
+                  {/* Fields Count */}
+                  <div className="text-sm text-blue-200 font-inter">
+                    Fields: {template.fields_required?.length || 0}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex justify-between mt-2">
+                    <Button
+                      onClick={() => handlePreview(template)}
+                      className="px-3 py-1 rounded-xl text-sm bg-[hsl(var(--accent-blue))] hover:brightness-105 text-white shadow-soft"
+                    >
+                      Preview
+                    </Button>
+                    <Link href={`/create/${template.template_id}`}>
+                      <Button className="px-3 py-1 rounded-xl text-sm bg-purple-600 hover:bg-purple-700 text-white shadow-soft">
+                        Customize
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </Card>
               ))}
             </div>
           )}
@@ -543,7 +494,7 @@ export default function HomePage() {
               {/* Template Image */}
               <div className="w-full">
                 <img
-                  src={renderThumbnail(previewTemplate.thumbnail, previewTemplate.template_name) || "/placeholder.svg"}
+                  src={getThumbnailUrl(previewTemplate.thumbnail_path || "")}
                   alt={previewTemplate.template_name}
                   className="w-full h-auto rounded-lg border-2 border-purple-400/30"
                   onError={(e) => {
@@ -556,8 +507,8 @@ export default function HomePage() {
               {/* Template Details */}
               <div className="space-y-3">
                 <div>
-                  <h4 className="text-lg font-bold text-white font-space mb-2">Description</h4>
-                  <p className="text-blue-200 font-inter">{previewTemplate.description}</p>
+                  <h4 className="text-lg font-bold text-white font-space mb-2">Tag</h4>
+                  <p className="text-blue-200 font-inter">{previewTemplate.tag || "—"}</p>
                 </div>
 
                 <div>

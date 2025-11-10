@@ -23,8 +23,34 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { supabase, type PosterTemplate, showToast, testSupabaseConnection } from "@/lib/supabase"
-import { sendToMakeWebhook, testMakeWebhook } from "@/lib/make-webhook"
+import { supabase, type PosterTemplate, showToast, testSupabaseConnection, getThumbnailUrl } from "@/lib/supabase"
+import { fetchJsonFriendly } from "@/lib/client-errors"
+import { PosterStatus, type PosterStatusType } from "@/lib/status"
+import { motion, AnimatePresence } from "framer-motion"
+import dynamic from "next/dynamic"
+
+// Dynamically import GenerationStatus with SSR disabled to prevent server-side vendor-chunk resolution
+// Use a stable relative path to avoid alias resolution issues during chunking in dev/prod.
+const GenerationStatus = dynamic(
+  () => import(/* webpackChunkName: "ui-generation-status" */ "../../../components/ui/generation-status").then((m) => m.default),
+  {
+  ssr: false,
+  loading: () => (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+    >
+      <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg ring-1 ring-black/10">
+        <div className="flex items-center justify-center">
+          <div aria-label="Loading" className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+        </div>
+        <p className="mt-4 text-center text-base font-medium text-gray-900">Preparing generation UI…</p>
+      </div>
+    </div>
+  ),
+  },
+)
 
 export default function CreatePoster() {
   const params = useParams()
@@ -40,8 +66,26 @@ export default function CreatePoster() {
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [isGenerating, setIsGenerating] = useState(false) // State for generation loading
   const [generatedPoster, setGeneratedPoster] = useState<string | null>(null)
+  const [posterStatus, setPosterStatus] = useState<PosterStatusType | null>(null)
   const [loadingMessage, setLoadingMessage] = useState("")
   const [sessionId, setSessionId] = useState("")
+
+  // Auto text contrast helper: returns 'text-white' or 'text-neutral-900' based on background brightness
+  const getTextColorClassForBg = (hex?: string) => {
+    if (!hex) return "text-white"
+    const clean = hex.replace("#", "")
+    if (clean.length !== 6) return "text-white"
+    const r = parseInt(clean.substring(0, 2), 16)
+    const g = parseInt(clean.substring(2, 4), 16)
+    const b = parseInt(clean.substring(4, 6), 16)
+    // Relative luminance
+    const toLinear = (c: number) => {
+      const s = c / 255
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
+    }
+    const L = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
+    return L > 0.5 ? "text-neutral-900" : "text-white"
+  }
 
   const loadingMessages = [
     "Design smarter, not harder.",
@@ -63,7 +107,6 @@ export default function CreatePoster() {
   }, [templateId])
 
   const testConnections = async () => {
-    console.log("🔍 Testing connections...")
 
     // Test Supabase
     const supabaseResult = await testSupabaseConnection()
@@ -72,12 +115,7 @@ export default function CreatePoster() {
       showToast(`Database connection failed: ${supabaseResult.error}`, "error")
     }
 
-    // Test Make webhook
-    const makeResult = await testMakeWebhook()
-    if (!makeResult.success) {
-      console.warn("⚠️ Make webhook test failed:", makeResult.error)
-      showToast(`Make webhook may not be configured: ${makeResult.error}`, "error")
-    }
+    // No external webhook; generation handled via backend API and Placid
   }
 
   const fetchTemplate = async () => {
@@ -85,12 +123,16 @@ export default function CreatePoster() {
       setLoading(true)
       setError("")
 
-      console.log("📥 Fetching template with ID:", templateId)
+      // Fetch template by ID
 
-      const { data, error } = await supabase.from("poster_templates").select("*").eq("template_id", templateId).single()
+      const { data, error } = await supabase
+        .from("poster_templates")
+        .select("*")
+        .eq("template_id", templateId)
+        .eq("is_active", true)
+        .single()
 
       if (error) {
-        console.error("❌ Supabase error:", error)
 
         // Handle specific error cases
         if (error.code === "PGRST116") {
@@ -108,17 +150,15 @@ export default function CreatePoster() {
         throw new Error("Template not found or has been removed.")
       }
 
-      console.log("✅ Fetched template:", data)
+      // Template fetched successfully
       setTemplate(data)
 
       // Validate template structure
       if (!data.template_uuid) {
-        console.warn("⚠️ Template missing template_uuid field")
         showToast("Template configuration issue: missing UUID", "error")
       }
 
       if (!data.fields_required || !Array.isArray(data.fields_required)) {
-        console.warn("⚠️ Template missing or invalid fields_required")
         showToast("Template configuration issue: invalid fields", "error")
       }
 
@@ -129,7 +169,6 @@ export default function CreatePoster() {
       })
       setFormData(initialFormData)
     } catch (err: any) {
-      console.error("❌ Error fetching template:", err)
       const errorMessage = err.message || "Failed to load template. Please try again."
       setError(errorMessage)
       showToast(errorMessage, "error")
@@ -205,58 +244,113 @@ export default function CreatePoster() {
     }, 1500)
 
     try {
-      console.log("🚀 Starting poster generation...")
 
-      // Create a record in generated_posters table - NO UNIQUE CONSTRAINTS
-      // This allows users to retry with same data if previous attempt failed
-      const { data: generatedPosterData, error: insertError } = await supabase
-        .from("generated_posters")
-        .insert({
-          template_name: template.template_name,
-          template_id: template.template_id,
-          template_uuid: template.template_uuid,
-          image_url: null, // Will be updated by Make webhook
-          time: new Date().toISOString(),
-          session_id: sessionId, // Ensure session_id is saved here
-        })
-        .select()
-        .single()
+      const result = await fetchJsonFriendly<{ success: boolean; image_url?: string | null; session_id?: string }>(
+        "/api/generate",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            template_uuid: template.template_uuid,
+            template_id: template.template_id,
+            input_data: formData,
+            session_id: sessionId,
+          }),
+        },
+        { retryCount: 1, userMessage: "Couldn’t generate your poster right now — we’re trying again." },
+      )
 
-      if (insertError) {
-        console.error("❌ Error creating generated_posters record:", insertError)
-        throw new Error(`Failed to create poster record: ${insertError.message}`)
+      if (!result.ok) {
+        throw new Error(result.message || "Failed to generate poster via Placid")
       }
 
-      console.log("✅ Created generated_posters record:", generatedPosterData)
-
-      // Prepare webhook data with new JSON format
-      const webhookPayload = {
-        templateId: template.template_uuid || template.template_id, // Use template_uuid as primary, fallback to template_id
-        fields: formData, // User form data as fields object
-        session_id: sessionId,
-        generated_poster_id: generatedPosterData.id,
-        timestamp: new Date().toISOString(),
+      const body = result.data || {}
+      if (body.image_url) {
+        setGeneratedPoster(body.image_url)
+        showToast("Poster generated successfully!", "success")
+        setIsGenerating(false)
+      } else {
+        // No immediate image_url: generation queued. Rely on realtime updates without sending a notify toast.
       }
-
-      console.log("📡 Sending data to Make webhook with new format...")
-      console.log("📦 Formatted payload:", JSON.stringify(webhookPayload, null, 2))
-
-      // Send to Make webhook
-      await sendToMakeWebhook(webhookPayload) // ⚡ your existing util
-
-      console.log("✅ Webhook sent successfully")
-
-      router.push(`/progress/${sessionId}`) // Redirect to progress page with session_id
     } catch (err: any) {
-      console.error("❌ Generation failed:", err)
-      showToast("Generation failed, try again.", "error")
-      setError(err.message || "Failed to generate poster. Please try again.")
+      showToast("We couldn’t generate your poster right now.", "error")
+      setError("Failed to generate poster. Please try again.")
     } finally {
       clearInterval(messageInterval)
-      setIsGenerating(false)
       setLoadingMessage("")
     }
   }
+
+  // Subscribe to Supabase Realtime for generated poster insertions by session_id
+  useEffect(() => {
+    if (!sessionId) return
+
+    const channel = supabase
+      .channel("generated_posters")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "generated_posters", filter: `session_id=eq.${sessionId}` },
+        (payload) => {
+          const poster = payload.new as any
+          if (poster) {
+            setPosterStatus(poster.status ?? null)
+          }
+          if (poster?.image_url) {
+            setGeneratedPoster(poster.image_url)
+            showToast("Poster generated successfully! Proceed to payment.", "success")
+            setIsGenerating(false)
+          }
+        },
+      )
+      .subscribe()
+
+    // Also subscribe to UPDATE events for when callback updates image_url
+    const updatesChannel = supabase
+      .channel("generated_posters_updates")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "generated_posters", filter: `session_id=eq.${sessionId}` },
+        (payload) => {
+          const poster = payload.new as any
+          if (poster) {
+            setPosterStatus(poster.status ?? null)
+          }
+          if (poster?.image_url) {
+            setGeneratedPoster(poster.image_url)
+            if (poster.status === PosterStatus.AWAITING_PAYMENT) {
+              showToast("Poster generated successfully! Proceed to payment.", "success")
+            }
+            if (poster.status === PosterStatus.COMPLETED) {
+              showToast("Payment received. Poster unlocked!", "success")
+            }
+            setIsGenerating(false)
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      supabase.removeChannel(updatesChannel)
+    }
+  }, [sessionId])
+
+  // Persist session details for payment page when poster is ready
+  useEffect(() => {
+    if (generatedPoster && template && sessionId) {
+      // Persist minimal session info for payment; force test price = KSh 1
+      const sessionInfo = {
+        posterUrl: generatedPoster,
+        templateId: template.template_id,
+        price: 1,
+      }
+      try {
+        localStorage.setItem(sessionId, JSON.stringify(sessionInfo))
+      } catch (e) {
+        // Silent failure; session info is optional and can be re-derived
+      }
+    }
+  }, [generatedPoster, template, sessionId])
 
   const renderBase64Image = (base64: string) => {
     if (!base64) return "/placeholder.svg?height=400&width=600"
@@ -265,7 +359,7 @@ export default function CreatePoster() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+<div className="min-h-screen site-gradient-bg flex items-center justify-center section-fade-in transition-smooth">
         <div className="text-center space-y-4">
           <Loader2 className="w-12 h-12 text-purple-400 animate-spin mx-auto" />
           <p className="text-white font-space text-xl">Loading template...</p>
@@ -277,7 +371,7 @@ export default function CreatePoster() {
 
   if (error || !template) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+<div className="min-h-screen site-gradient-bg flex items-center justify-center section-fade-in transition-smooth">
         <Card className="glass p-8 text-center max-w-md">
           <div className="text-4xl mb-4">{connectionError ? "🔌" : "😯"}</div>
           <h2 className="text-2xl font-bold text-white mb-2 font-space">
@@ -312,7 +406,7 @@ export default function CreatePoster() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 relative overflow-hidden">
+    <div className="min-h-screen site-gradient-bg relative overflow-hidden section-fade-in scroll-fade-in transition-smooth">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
@@ -361,6 +455,14 @@ export default function CreatePoster() {
         </div>
       </section>
 
+      {/* Full-screen, accessible loading overlay while generation is in progress */}
+      <GenerationStatus
+        isOpen={isGenerating}
+        sessionId={sessionId}
+        templateId={template?.template_id}
+        onClose={() => setIsGenerating(false)}
+      />
+
       <div className="relative z-10 px-4 md:px-6 pb-16">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
           {/* Form Section */}
@@ -384,7 +486,10 @@ export default function CreatePoster() {
                   className="space-y-2 animate-in fade-in-0 slide-in-from-bottom-4 duration-1000"
                   style={{ animationDelay: `${index * 0.1}s` }}
                 >
-                  <Label htmlFor={field.name} className="text-white font-medium font-space flex items-center">
+                  <Label
+                    htmlFor={field.name}
+                    className={`${getTextColorClassForBg((formData.background_color || formData.bgColor) as string)} font-medium font-space flex items-center`}
+                  >
                     {field.type === "image" && <ImageIcon className="w-4 h-4 mr-2" />}
                     {field.type === "text" && <Type className="w-4 h-4 mr-2" />}
                     {field.type === "textarea" && <Palette className="w-4 h-4 mr-2" />}
@@ -448,11 +553,12 @@ export default function CreatePoster() {
               <Button
                 onClick={handleGenerateClick} // Wired to new handler
                 disabled={isGenerating}
-                className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 btn-interactive neon-purple py-4 text-lg font-semibold font-space"
+                className={`relative w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 btn-interactive neon-purple py-4 text-lg font-semibold font-space ${isGenerating ? "ring-2 ring-white/60 ring-offset-2 ring-offset-purple-500/20" : ""}`}
               >
                 {isGenerating ? (
                   <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    <span className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-[hsl(var(--accent-blue))] to-[hsl(var(--accent-green))] opacity-20 blur-sm" />
+                    <Loader2 className="relative w-5 h-5 mr-2 animate-spin" />
                     Creating Magic...
                   </>
                 ) : (
@@ -476,65 +582,103 @@ export default function CreatePoster() {
             </div>
 
             <div className="relative">
-              {isGenerating ? (
-                <div className="aspect-[4/3] bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-lg flex flex-col items-center justify-center space-y-4 animate-pulse">
-                  <div className="relative">
-                    <div className="w-16 h-16 border-4 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-                    <div className="absolute inset-0 w-16 h-16 border-4 border-blue-400 border-b-transparent rounded-full animate-spin animate-reverse"></div>
-                  </div>
-
-                  <div className="text-center space-y-2">
-                    <p className="text-white font-bold text-lg font-space animate-pulse">{loadingMessage}</p>
-                    <div className="flex space-x-1">
-                      {[...Array(3)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"
-                          style={{ animationDelay: `${i * 0.2}s` }}
-                        ></div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : generatedPoster ? (
+              {generatedPoster ? (
                 <div className="space-y-4">
-                  <div className="aspect-[4/3] bg-white rounded-lg overflow-hidden border-2 border-purple-400 neon-purple">
+                  <div className="relative aspect-[4/3] bg-white rounded-lg overflow-hidden border-2 border-purple-400 neon-purple">
                     <img
                       src={generatedPoster || "/placeholder.svg"}
                       alt="Generated poster"
                       className="w-full h-full object-cover"
                     />
+                    {/* Blur overlay while awaiting payment */}
+                    <AnimatePresence>
+                      {posterStatus !== PosterStatus.COMPLETED && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 0.7 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.4 }}
+                          className="absolute inset-0 bg-black/30 backdrop-blur-[12px] flex items-center justify-center"
+                        >
+                          <div className="text-center px-6">
+                            {/* Tiny confetti animation in background */}
+                            <div className="absolute inset-0 pointer-events-none">
+                              {[...Array(20)].map((_, i) => (
+                                <motion.span
+                                  key={i}
+                                  className="absolute w-2 h-2 rounded-full"
+                                  style={{
+                                    top: `${Math.random() * 100}%`,
+                                    left: `${Math.random() * 100}%`,
+                                    backgroundColor: ["#22c55e", "#0ea5e9", "#7c3aed", "#f59e0b"][i % 4],
+                                  }}
+                                  initial={{ opacity: 0, y: -10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.8, delay: i * 0.02 }}
+                                />
+                              ))}
+                            </div>
+                            <p className="relative z-10 text-white font-space text-lg mb-2">
+                              Poster generated successfully! Proceed to payment.
+                            </p>
+                            <p className="relative z-10 text-blue-100 font-inter text-sm mb-4">
+                              Pay KSh 1 to unlock your poster.
+                            </p>
+                            <Link href={`/payment/${sessionId}`} className="relative z-10">
+                              <Button className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 btn-interactive neon-green py-3 font-space">
+                                <Download className="w-5 h-5 mr-2" />
+                                Pay KSh 1 to unlock
+                              </Button>
+                            </Link>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <div className="text-center">
-                    <div className="text-4xl mb-2">🔥</div>
-                    <p className="text-green-400 font-bold font-space">Poster Ready!</p>
-                    <p className="text-blue-200 text-sm font-inter">Looking good, champ!</p>
+                    {posterStatus === PosterStatus.COMPLETED ? (
+                      <>
+                        <div className="text-4xl mb-2">🎉</div>
+                        <p className="text-green-400 font-bold font-space">Payment received. Poster unlocked!</p>
+                        <p className="text-blue-200 text-sm font-inter">You can download your poster now.</p>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-4xl mb-2">🔥</div>
+                        <p className="text-yellow-300 font-bold font-space">Awaiting payment…</p>
+                        <p className="text-blue-200 text-sm font-inter">Complete payment to reveal your poster.</p>
+                      </>
+                    )}
                   </div>
 
-                  {template.price === 0 ? (
+                  {posterStatus === PosterStatus.COMPLETED ? (
                     <Link href={`/download/${sessionId}`}>
                       <Button className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 btn-interactive neon-green py-3 font-space">
                         <Download className="w-5 h-5 mr-2" />
-                        Download Free
+                        Download Poster
                       </Button>
                     </Link>
                   ) : (
                     <Link href={`/payment/${sessionId}`}>
                       <Button className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 btn-interactive neon-green py-3 font-space">
                         <Download className="w-5 h-5 mr-2" />
-                        Pay & Download (KSh {template.price})
+                        Pay KSh 1 to unlock
                       </Button>
                     </Link>
                   )}
                 </div>
               ) : (
                 <div className="aspect-[4/3] bg-gradient-to-br from-gray-500/20 to-gray-600/20 rounded-lg flex items-center justify-center border-2 border-dashed border-white/30 overflow-hidden">
-                  {template.thumbnail ? (
+                  {template.thumbnail_path ? (
                     <img
-                      src={renderBase64Image(template.thumbnail) || "/placeholder.svg"}
+                      src={getThumbnailUrl(template.thumbnail_path)}
                       alt={template.template_name}
                       className="w-full h-full object-cover opacity-50"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.src = "/placeholder.svg"
+                      }}
                     />
                   ) : (
                     <div className="text-center space-y-2">

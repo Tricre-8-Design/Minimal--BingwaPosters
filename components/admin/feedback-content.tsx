@@ -1,94 +1,67 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search, Filter } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 interface FeedbackItem {
-  id: number
-  phoneNumber?: string
+  id: string | number
+  phone_number?: string
   rating: number
-  comment: string
-  templateUsed: string
-  date: string
-  status: "new" | "reviewed" | "featured" | "flagged"
-  helpful: boolean
-  posterPreview: string
+  comment: string | null
+  template_name?: string | null
+  created_at: string
 }
 
 export default function FeedbackContent() {
-  const [feedback, setFeedback] = useState<FeedbackItem[]>([
-    {
-      id: 1,
-      phoneNumber: "+254712345678",
-      rating: 5,
-      comment: "Amazing app! Very easy to use. I made my poster in less than 2 minutes!",
-      templateUsed: "Biashara Boost",
-      date: "2024-01-20",
-      status: "new",
-      helpful: true,
-      posterPreview: "/placeholder.svg?height=80&width=120&text=Biashara+Boost",
-    },
-    {
-      id: 2,
-      rating: 4,
-      comment: "Good app but the payment process could be faster. Overall satisfied.",
-      templateUsed: "Sokoni Special",
-      date: "2024-01-19",
-      status: "reviewed",
-      helpful: true,
-      posterPreview: "/placeholder.svg?height=80&width=120&text=Sokoni+Special",
-    },
-    {
-      id: 3,
-      phoneNumber: "+254756789012",
-      rating: 5,
-      comment: "Perfect for my restaurant! Customers love the new posters. Asante sana!",
-      templateUsed: "Food Fiesta",
-      date: "2024-01-18",
-      status: "featured",
-      helpful: true,
-      posterPreview: "/placeholder.svg?height=80&width=120&text=Food+Fiesta",
-    },
-    {
-      id: 4,
-      phoneNumber: "+254798765432",
-      rating: 3,
-      comment: "It's okay but I wish there were more template options.",
-      templateUsed: "Tech Vibes",
-      date: "2024-01-17",
-      status: "reviewed",
-      helpful: false,
-      posterPreview: "/placeholder.svg?height=80&width=120&text=Tech+Vibes",
-    },
-    {
-      id: 5,
-      phoneNumber: "+254723456789",
-      rating: 5,
-      comment: "Hii app imeniokoa sana! Now I can make posters for my bundles business easily.",
-      templateUsed: "Biashara Boost",
-      date: "2024-01-16",
-      status: "featured",
-      helpful: true,
-      posterPreview: "/placeholder.svg?height=80&width=120&text=Biashara+Boost",
-    },
-    {
-      id: 6,
-      rating: 2,
-      comment: "App is slow and crashed twice. Not happy with the experience.",
-      templateUsed: "Sokoni Special",
-      date: "2024-01-15",
-      status: "flagged",
-      helpful: false,
-      posterPreview: "/placeholder.svg?height=80&width=120&text=Sokoni+Special",
-    },
-  ])
+  const [feedback, setFeedback] = useState<FeedbackItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState<"all" | "new" | "reviewed">("all")
+
+  useEffect(() => {
+    const loadFeedback = async () => {
+      try {
+        setIsLoading(true)
+        setLoadError(null)
+        const { data, error } = await supabase
+          .from("feedback")
+          .select("id, phone_number, rating, comment, template_name, created_at")
+          .order("created_at", { ascending: false })
+        if (error) throw error
+        setFeedback(
+          (data || []).map((f: any) => ({
+            id: f.id,
+            phone_number: f.phone_number || "",
+            rating: f.rating || 0,
+            comment: f.comment || null,
+            template_name: f.template_name || null,
+            created_at: f.created_at || new Date().toISOString(),
+          })),
+        )
+      } catch (err: any) {
+        // Record a user-friendly error state without logging to console
+        setLoadError("Failed to load feedback. Please try again.")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadFeedback()
+
+    const channel = supabase
+      .channel("feedback-changes-admin")
+      .on("postgres_changes", { event: "*", schema: "public", table: "feedback" }, () => loadFeedback())
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   const handleCall = (phoneNumber?: string) => {
     if (phoneNumber) {
@@ -113,9 +86,9 @@ export default function FeedbackContent() {
 
   const filteredFeedback = feedback.filter((item) => {
     const matchesSearch =
-      item.comment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.templateUsed.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.phoneNumber && item.phoneNumber.includes(searchTerm))
+      (item.comment || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.template_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.phone_number && item.phone_number.includes(searchTerm))
 
     const matchesStatus = filterStatus === "all" || item.status === filterStatus
 
@@ -152,8 +125,8 @@ export default function FeedbackContent() {
     feedback.length > 0 ? (feedback.reduce((sum, item) => sum + item.rating, 0) / feedback.length).toFixed(1) : "0"
 
   return (
-    <div className="space-y-6">
-      <Card className="glass p-6 animate-in fade-in-0 slide-in-from-top-4 duration-1000">
+    <div className="space-y-6 section-fade-in scroll-fade-in transition-smooth">
+      <Card className="glass p-6 animate-fade-in">
         <h2 className="text-2xl font-bold text-white font-space mb-6">Feedback Management</h2>
 
         {/* Search and Filter Section */}
@@ -165,7 +138,7 @@ export default function FeedbackContent() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search feedback by comment, phone, or template..."
-              className="glass pl-10 text-white placeholder-blue-300 border-white/20 focus:border-purple-400 focus:neon-purple transition-all duration-300 font-inter h-11"
+              className="glass pl-10 text-white placeholder-blue-300 border-white/20 focus:border-purple-400 focus:neon-purple transition-smooth font-inter h-11"
             />
           </div>
 
@@ -178,7 +151,7 @@ export default function FeedbackContent() {
 
             <Button
               onClick={() => setFilterStatus("all")}
-              className={`text-sm px-4 py-2 rounded-full transition-all ${
+              className={`text-sm px-4 py-2 rounded-full transition-smooth hover-subtle ${
                 filterStatus === "all"
                   ? "bg-purple-500/50 text-white neon-purple"
                   : "glass bg-white/10 text-blue-200 hover:bg-white/20"
@@ -189,7 +162,7 @@ export default function FeedbackContent() {
 
             <Button
               onClick={() => setFilterStatus("new")}
-              className={`text-sm px-4 py-2 rounded-full transition-all ${
+              className={`text-sm px-4 py-2 rounded-full transition-smooth hover-subtle ${
                 filterStatus === "new"
                   ? "bg-blue-500/50 text-white neon-blue"
                   : "glass bg-white/10 text-blue-200 hover:bg-white/20"
@@ -200,7 +173,7 @@ export default function FeedbackContent() {
 
             <Button
               onClick={() => setFilterStatus("reviewed")}
-              className={`text-sm px-4 py-2 rounded-full transition-all ${
+              className={`text-sm px-4 py-2 rounded-full transition-smooth hover-subtle ${
                 filterStatus === "reviewed"
                   ? "bg-green-500/50 text-white neon-green"
                   : "glass bg-white/10 text-blue-200 hover:bg-white/20"
@@ -213,19 +186,51 @@ export default function FeedbackContent() {
       </Card>
 
       {/* Feedback Results Section */}
-      <Card className="glass p-6 animate-in fade-in-0 slide-in-from-bottom-4 duration-1000 delay-200">
-        <div className="text-center py-12">
-          <Search className="w-16 h-16 text-blue-300 mx-auto mb-4 opacity-50" />
-          <h3 className="text-xl font-bold text-white font-space mb-2">Feedback List</h3>
-          <p className="text-blue-200 font-inter">
-            {filterStatus === "all"
-              ? "All user feedback will appear here"
-              : filterStatus === "new"
-                ? "New unreviewed feedback will appear here"
-                : "Reviewed feedback will appear here"}
-          </p>
-          <p className="text-sm text-blue-300 font-inter mt-3">{searchTerm && `Searching for: "${searchTerm}"`}</p>
-        </div>
+      <Card className="glass p-6 animate-fade-in">
+        {isLoading ? (
+          <div className="text-center py-12">
+            <Search className="w-16 h-16 text-blue-300 mx-auto mb-4 opacity-50" />
+            <p className="text-blue-200 font-inter">Loading feedback…</p>
+          </div>
+        ) : loadError ? (
+          <div className="text-center py-12">
+            <Search className="w-16 h-16 text-red-300 mx-auto mb-4 opacity-60" />
+            <h3 className="text-xl font-bold text-white font-space mb-2">Unable to Load Feedback</h3>
+            <p className="text-blue-200 font-inter">{loadError}</p>
+          </div>
+        ) : filteredFeedback.length === 0 ? (
+          <div className="text-center py-12">
+            <Search className="w-16 h-16 text-blue-300 mx-auto mb-4 opacity-50" />
+            <h3 className="text-xl font-bold text-white font-space mb-2">No Feedback Found</h3>
+            <p className="text-blue-200 font-inter">
+              {searchTerm ? `No feedback matches "${searchTerm}"` : "No user feedback available yet."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredFeedback.map((item, index) => (
+              <div
+                key={item.id}
+                className="flex items-start justify-between p-4 glass rounded-lg hover:neon-purple transition-smooth animate-in fade-in-0"
+                style={{ animationDelay: `${index * 60}ms` }}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3 mb-1">
+                    <span className={`font-bold font-space ${getRatingColor(item.rating)}`}>{item.rating}★</span>
+                    <span className="text-xs text-blue-300 font-inter">{formatDate(item.created_at)}</span>
+                  </div>
+                  {item.template_name && (
+                    <p className="text-sm text-blue-200 font-inter">Template: {item.template_name}</p>
+                  )}
+                  <p className="text-white font-inter leading-relaxed mt-1">{item.comment || "(no comment)"}</p>
+                  {item.phone_number && (
+                    <p className="text-xs text-blue-300 font-inter mt-1">Phone: {item.phone_number}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   )

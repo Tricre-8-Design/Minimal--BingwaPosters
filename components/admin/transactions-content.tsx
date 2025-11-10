@@ -12,8 +12,10 @@ interface Transaction {
   id: string
   phone_number: string
   status: "Paid" | "Pending" | "Failed"
-  time: string
+  created_at: string
   amount: number
+  mpesa_code: string | null
+  image_url: string | null
 }
 
 export default function TransactionsContent() {
@@ -21,27 +23,32 @@ export default function TransactionsContent() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "pending" | "failed">("all")
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadTransactions = async () => {
       try {
         setIsLoading(true)
-        const { data, error } = await supabase.from("payments").select("*").order("time", { ascending: false })
+        setLoadError(null)
+        const { data, error } = await supabase.from("payments").select("*").order("created_at", { ascending: false })
 
         if (error) throw error
 
         const formattedData =
           data?.map((payment) => ({
-            id: payment.phone_number + payment.time,
-            phone_number: payment.phone_number,
+            id: String(payment.id ?? payment.phone_number + payment.created_at),
+            phone_number: String(payment.phone_number ?? ""),
             status: payment.status,
-            time: payment.time,
-            amount: 50, // Fixed amount per transaction
+            created_at: String(payment.created_at ?? new Date().toISOString()),
+            amount: Number(payment.amount ?? 0),
+            mpesa_code: payment.mpesa_code ?? null,
+            image_url: payment.image_url ?? null,
           })) || []
 
         setTransactions(formattedData)
-      } catch (error) {
-        console.error("Error loading transactions:", error)
+      } catch (error: any) {
+        // Record a friendly error without logging to console
+        setLoadError("Failed to load transactions. Please try again.")
       } finally {
         setIsLoading(false)
       }
@@ -85,7 +92,7 @@ export default function TransactionsContent() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen section-fade-in">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-blue-200 font-inter">Loading transactions...</p>
@@ -94,11 +101,22 @@ export default function TransactionsContent() {
     )
   }
 
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen section-fade-in">
+        <div className="text-center">
+          <div className="rounded-full h-12 w-12 bg-red-500/20 mx-auto flex items-center justify-center">⚠️</div>
+          <p className="mt-4 text-blue-200 font-inter">{loadError}</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 section-fade-in scroll-fade-in transition-smooth">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
-        <Card className="glass p-6 hover:neon-green transition-all duration-300 hover:scale-105">
+        <Card className="glass p-6 hover:neon-green hover-subtle transition-smooth">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-200 text-sm font-inter">Total Revenue</p>
@@ -110,7 +128,7 @@ export default function TransactionsContent() {
           </div>
         </Card>
 
-        <Card className="glass p-6 hover:neon-blue transition-all duration-300 hover:scale-105">
+        <Card className="glass p-6 hover:neon-blue hover-subtle transition-smooth">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-200 text-sm font-inter">Total Transactions</p>
@@ -122,7 +140,7 @@ export default function TransactionsContent() {
           </div>
         </Card>
 
-        <Card className="glass p-6 hover:neon-purple transition-all duration-300 hover:scale-105">
+        <Card className="glass p-6 hover:neon-purple hover-subtle transition-smooth">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-200 text-sm font-inter">Pending</p>
@@ -184,7 +202,21 @@ export default function TransactionsContent() {
                     </div>
                     <div>
                       <p className="text-white font-space font-semibold">{transaction.phone_number}</p>
-                      <p className="text-xs text-blue-300 font-inter">{formatDate(transaction.time)}</p>
+                      <p className="text-xs text-blue-300 font-inter">{formatDate(transaction.created_at)}</p>
+                      {transaction.mpesa_code && (
+                        <p className="text-xs text-blue-200 font-inter mt-1">Mpesa Code: {transaction.mpesa_code}</p>
+                      )}
+                      {transaction.image_url && (
+                        <a
+                          href={transaction.image_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-purple-300 underline font-inter mt-1 inline-block"
+                          aria-label="Open poster image"
+                        >
+                          View Image
+                        </a>
+                      )}
                     </div>
                   </div>
                 </div>
