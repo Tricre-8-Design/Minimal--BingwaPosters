@@ -83,15 +83,15 @@ export default function DashboardContent() {
         if (feedbackError) throw feedbackError
 
         const totalPosters = posters?.length || 0
-        // Test mode: fixed amount KSh 1 per paid transaction
-        const totalRevenue = payments?.reduce((sum, p) => sum + (p.status === "Paid" ? 1 : 0), 0) || 0
+        const totalRevenue =
+          payments?.reduce((sum, p) => sum + (p.status === "Paid" ? Number(p.amount) || 0 : 0), 0) || 0
         const avgRating = feedback?.length > 0 ? feedback.reduce((sum, f) => sum + f.rating, 0) / feedback.length : 0
 
         const todayPosters = posters?.filter((p) => (p.created_at || p.time)?.startsWith(today)).length || 0
         const todayRevenue =
           payments
             ?.filter((p) => (p.created_at || "").startsWith(today) && p.status === "Paid")
-            .reduce((sum, p) => sum + 1, 0) || 0
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0
 
         setStats({
           totalPosters,

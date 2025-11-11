@@ -8,14 +8,11 @@ import { logError } from "@/lib/server-errors"
 // Validates and initiates STK Push, records pending payment in Supabase
 export async function POST(req: Request) {
   try {
-    const { session_id, amount, phoneNumber } = await req.json()
+    const { session_id, phoneNumber } = await req.json()
 
-    if (!session_id || !phoneNumber || typeof amount !== "number") {
+    if (!session_id || !phoneNumber) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
-
-    // Use dynamic template amount provided by client/session
-    const normalizedAmount = amount
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -24,10 +21,10 @@ export async function POST(req: Request) {
     }
     const supabaseAdmin = createClient(supabaseUrl, serviceKey)
 
-    // Validate session exists (generated_posters created)
+    // Validate session exists (generated_posters created) and get template_id
     const { data: posterRows, error: posterErr } = await supabaseAdmin
       .from("generated_posters")
-      .select("image_url, session_id")
+      .select("image_url, session_id, template_id")
       .eq("session_id", session_id)
       .limit(1)
 
@@ -40,6 +37,27 @@ export async function POST(req: Request) {
     }
 
     const imageUrl = posterRows[0]?.image_url || null
+    const templateId = posterRows[0]?.template_id || null
+
+    // Retrieve price from poster_templates (source of truth)
+    let normalizedAmount: number | null = null
+    if (templateId) {
+      const { data: tpl, error: tplErr } = await supabaseAdmin
+        .from("poster_templates")
+        .select("price")
+        .eq("template_id", templateId)
+        .limit(1)
+        .single()
+      if (tplErr) {
+        await logError({ source: "api/mpesa/initiate", error: tplErr, statusCode: 500, meta: { session_id, templateId } })
+        return NextResponse.json({ success: false, error: "Failed to read template price" }, { status: 500 })
+      }
+      normalizedAmount = Number(tpl?.price ?? 0)
+    }
+    // Fallback: if templateId missing or price invalid
+    if (!normalizedAmount || normalizedAmount <= 0) {
+      return NextResponse.json({ success: false, error: "Invalid or missing template price" }, { status: 400 })
+    }
     const phone = normalizePhone(phoneNumber)
 
     // Create pending payment record
@@ -52,6 +70,7 @@ export async function POST(req: Request) {
         status: "Pending",
         session_id,
         amount: normalizedAmount,
+        template_id: templateId,
       })
       .select()
       .single()

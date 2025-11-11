@@ -30,10 +30,28 @@ export default function PaymentPage() {
       const parsedData = JSON.parse(data)
       setSessionData(parsedData)
 
-      // If it's a free template, redirect to download
-      if (parsedData.price === 0) {
-        router.push(`/download/${sessionId}`)
+      // Fetch latest price from DB to avoid stale or overridden values
+      const refreshPrice = async () => {
+        try {
+          const { data: tpl } = await supabase
+            .from("poster_templates")
+            .select("price")
+            .eq("template_id", parsedData.templateId)
+            .limit(1)
+            .single()
+          if (tpl && typeof tpl.price === "number") {
+            const updated = { ...parsedData, price: tpl.price }
+            setSessionData(updated)
+            localStorage.setItem(sessionId, JSON.stringify(updated))
+            if (tpl.price === 0) {
+              router.push(`/download/${sessionId}`)
+            }
+          }
+        } catch (_) {
+          // Ignore price refresh errors silently
+        }
       }
+      refreshPrice()
     }
   }, [sessionId, router])
 
@@ -97,7 +115,6 @@ export default function PaymentPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: sessionId,
-          amount: sessionData.price,
           phoneNumber: localPhone,
         }),
       })

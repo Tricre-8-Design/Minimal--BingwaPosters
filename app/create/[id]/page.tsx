@@ -338,11 +338,11 @@ export default function CreatePoster() {
   // Persist session details for payment page when poster is ready
   useEffect(() => {
     if (generatedPoster && template && sessionId) {
-      // Persist minimal session info for payment; force test price = KSh 1
+      // Persist minimal session info for payment; use template price from DB
       const sessionInfo = {
         posterUrl: generatedPoster,
         templateId: template.template_id,
-        price: 1,
+        price: template.price,
       }
       try {
         localStorage.setItem(sessionId, JSON.stringify(sessionInfo))
@@ -622,12 +622,12 @@ export default function CreatePoster() {
                               Poster generated successfully! Proceed to payment.
                             </p>
                             <p className="relative z-10 text-blue-100 font-inter text-sm mb-4">
-                              Pay KSh 1 to unlock your poster.
+                              Pay KSh {template?.price} to unlock your poster.
                             </p>
                             <Link href={`/payment/${sessionId}`} className="relative z-10">
                               <Button className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 btn-interactive neon-green py-3 font-space">
                                 <Download className="w-5 h-5 mr-2" />
-                                Pay KSh 1 to unlock
+                                Pay KSh {template?.price} to unlock
                               </Button>
                             </Link>
                           </div>
@@ -663,7 +663,7 @@ export default function CreatePoster() {
                     <Link href={`/payment/${sessionId}`}>
                       <Button className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 btn-interactive neon-green py-3 font-space">
                         <Download className="w-5 h-5 mr-2" />
-                        Pay KSh 1 to unlock
+                        Pay KSh {template?.price} to unlock
                       </Button>
                     </Link>
                   )}
