@@ -112,38 +112,6 @@ public/
 - Generates sanitized filenames: `posters/<sessionId>/<field>-<timestamp>.<ext>`.
 - Returns public URLs suitable for Placid layers; errors are surfaced with concise messages.
 
-### Admin Template Thumbnails (Supabase Storage)
-
-- Thumbnails for templates are uploaded directly to the Supabase storage bucket `templates-thumbnails` under `thumbnails/<filename>`.
-- Client-side validation enforces allowed types: `JPG`, `PNG`, `WEBP` and a max size of `5MB`.
-- Filenames are unique and include template id, timestamp, and a random suffix to avoid collisions.
-- After successful upload, the public URL is resolved and auto-populates the template's `thumbnail_path` field.
-- A manual text field allows pasting a public image URL, which can be saved to `thumbnail_path` without uploading.
-
-Configuration:
-- Create a bucket named `templates-thumbnails` in Supabase Storage.
-- Ensure the bucket has public read access. Example policy (Postgres):
-
-```
-begin;
-  -- Allow public read on templates-thumbnails
-  insert into storage.policies (bucket_id, name, definition)
-  values ('templates-thumbnails', 'Public read', '(
-    (request.method = ''GET''::storage.http_method)
-  )');
-commit;
-```
-
-Usage:
-- Admin → Templates → use the Upload Image button to select a JPG/PNG/WEBP ≤5MB.
-- After upload, the preview displays via the resolved public URL.
-- Optionally paste a public image URL in the Thumbnail URL field and click "Save Link" while editing.
-
-Troubleshooting:
-- If uploads fail, verify `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set.
-- Confirm the bucket exists and is public; check CORS if images fail to preview.
-- Check the browser console and Supabase Storage logs for specific errors.
-
 ### Generation Status Overlay (`components/ui/generation-status.tsx`)
 - Full-screen, accessible status UI with real-time updates via Supabase Realtime.
 - Uses `react-loading-indicators` `Riple` for custom animations; rotating humorous messages; stage-based feedback.
@@ -159,6 +127,16 @@ Troubleshooting:
 ### Server Integration (`app/api/generate/route.ts`)
 - Uploads incoming image fields to Supabase Storage and passes clean public URLs to Placid.
 - Upserts poster records with `template_name` and `status` fields.
+
+### Admin Templates — Thumbnail Link, Refresh, and Realtime
+- Adds a text field next to the thumbnail upload button on the admin template creation/edit form.
+  - Accepts either a public image URL (e.g., `https://...`) or a Supabase Storage path (e.g., `thumbnails/my-file.png`).
+  - Saves to `poster_templates.thumbnail_path`. Preview resolves automatically using `getThumbnailUrl`.
+- Adds a "Refresh Templates" button in the templates header.
+  - Triggers a full reload of template data, shows a loading spinner on the button, and displays success/error toast feedback.
+- Implements Supabase Realtime subscriptions for `poster_templates`.
+  - New templates are added instantly, edits update in place, and deletions are removed from the list without manual refresh.
+  - Requires Realtime enabled for `public.poster_templates` (see configuration below).
 
 ## Changelog
 
@@ -331,10 +309,14 @@ import HeadlineRotator from "@/components/ui/headline-rotator"
 
 ## Admin Dashboard Updates
 
-### Templates Refresh & Realtime Updates
-- Templates page adds a "Refresh Templates" button with a loading state and success/error toasts.
-- Supabase Realtime subscriptions keep the list in sync with inserts, updates, and deletions on `poster_templates`.
-- No manual reload is needed; changes propagate automatically once connected.
+### Templates Management — Usage
+- Navigate to `/admin/templates` or the Admin "Templates" tab.
+- To set a thumbnail:
+  - Upload an image (stored in `templates-thumbnails` bucket), or
+  - Paste a public image URL or Supabase storage path in the new "Thumbnail Link" field.
+  - The preview updates live and is saved to `poster_templates.thumbnail_path` when you save the template.
+- Click "Refresh Templates" to reload data — the button shows a loading state and displays success/error toast feedback.
+- When Supabase Realtime is enabled for `poster_templates`, template additions, updates, and deletions reflect automatically without manual refresh.
 
 
 ## Authentication Flow & Route Configuration
@@ -428,7 +410,7 @@ Stores all available poster templates
 | `description` | TEXT | Template description |
 | `category` | TEXT | Category (Data, SMS, Minutes, Announcements, Others) |
 | `price` | NUMERIC | Price in KES (default: 50) |
-| `thumbnail` | TEXT | Base64-encoded preview image |
+| `thumbnail_path` | TEXT | Storage path or public URL for preview image |
 | `fields_required` | JSONB | Array of field definitions |
 | `is_active` | BOOLEAN | Whether template is available |
 | `created_at` | TIMESTAMP | Creation time |
@@ -563,6 +545,18 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key (server-only)
 
 **Usage**: Real-time database queries, subscriptions, storage (future)
 
+#### Realtime Configuration for Templates
+- Enable Realtime for the `public.poster_templates` table in Supabase Dashboard:
+  - Navigate to Realtime → Tables & Functions → toggle `poster_templates`.
+  - Ensure `INSERT`, `UPDATE`, and `DELETE` events are enabled.
+- Confirm Row Level Security (RLS) policies allow clients to `SELECT` from `poster_templates` if your admin UI uses the anon client.
+  - Typical policy: allow read access for authenticated roles or use a service role; adjust to your security model.
+- Required env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+
+#### Storage Bucket for Thumbnails (Optional)
+- Create a bucket named `templates-thumbnails` and allow public read access (or serve via signed URLs).
+- Store thumbnails under `thumbnails/<fileName>`; the app resolves public URLs via `getThumbnailUrl(thumbnail_path)`.
+
 ### 2. **M-Pesa Daraja (Payment Gateway)**
 
 **Environment Variables**:
@@ -671,7 +665,6 @@ npm run start
 - **lib/mpesa.ts**: M-Pesa (Daraja) helpers and STK Push initiation
 - **app/api/generate/route.ts**: Placid REST generation endpoint
 - **app/admin/page.tsx**: Admin dashboard with tabs
- - **app/admin/templates/page.tsx**: Templates management page with thumbnail uploads, refresh, and realtime
 
 ### Common Patterns
 
