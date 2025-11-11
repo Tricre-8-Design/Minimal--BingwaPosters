@@ -28,6 +28,7 @@ export default function TemplatesContent() {
   const [editingTemplate, setEditingTemplate] = useState<PosterTemplate | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -43,6 +44,46 @@ export default function TemplatesContent() {
 
   useEffect(() => {
     fetchTemplates()
+    // Subscribe to realtime changes in poster_templates
+    const channel = supabaseAdmin
+      .channel("realtime:poster_templates")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "poster_templates" },
+        (payload: any) => {
+          const newTemplate = payload.new as PosterTemplate
+          setTemplates((prev) => {
+            const next = prev.filter((t) => t.template_id !== newTemplate.template_id).concat(newTemplate)
+            return next.sort((a, b) => a.template_name.localeCompare(b.template_name))
+          })
+          showToast("New template added (realtime)", "success")
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "poster_templates" },
+        (payload: any) => {
+          const updated = payload.new as PosterTemplate
+          setTemplates((prev) =>
+            prev.map((t) => (t.template_id === updated.template_id ? { ...t, ...updated } : t)),
+          )
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "poster_templates" },
+        (payload: any) => {
+          const removed = payload.old as PosterTemplate
+          setTemplates((prev) => prev.filter((t) => t.template_id !== removed.template_id))
+        },
+      )
+      .subscribe()
+
+    return () => {
+      try {
+        supabaseAdmin.removeChannel(channel)
+      } catch {}
+    }
   }, [])
 
   const fetchTemplates = async () => {
@@ -60,6 +101,20 @@ export default function TemplatesContent() {
       showToast(`Failed to fetch templates: ${error.message}`, "error")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const refreshTemplates = async () => {
+    try {
+      setRefreshing(true)
+      const { data, error } = await supabaseAdmin.from("poster_templates").select("*").order("template_name")
+      if (error) throw error
+      setTemplates(data || [])
+      showToast("Templates refreshed successfully", "success")
+    } catch (error: any) {
+      showToast(`Failed to refresh templates: ${error.message}`, "error")
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -289,10 +344,24 @@ export default function TemplatesContent() {
     <div className="space-y-6 min-h-screen p-6 section-fade-in scroll-fade-in transition-smooth">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-800">Poster Templates</h1>
-        <Button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700 hover-subtle transition-smooth">
-          <Plus className="w-4 h-4 mr-2" />
-          Add Template
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={refreshTemplates}
+            variant="outline"
+            className="border-blue-300 text-blue-700 hover:bg-blue-50 transition-smooth"
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <span className="flex items-center"><RippleLoader size={16} color="#2563eb" speed={1.2} className="mr-2" />Refreshing…</span>
+            ) : (
+              <span className="flex items-center"><Upload className="w-4 h-4 mr-2" />Refresh Templates</span>
+            )}
+          </Button>
+          <Button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700 hover-subtle transition-smooth">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Template
+          </Button>
+        </div>
       </div>
 
       {/* Create/Edit Form */}
@@ -396,8 +465,8 @@ export default function TemplatesContent() {
               <Label className="text-gray-700 font-medium mb-2 block">Thumbnail Image</Label>
 
               <div className="space-y-4">
-                {/* Upload Button */}
-                <div className="flex items-center gap-4">
+                {/* Upload Button + Thumbnail Link Field */}
+                <div className="flex items-center gap-4 flex-wrap">
                   <label className="cursor-pointer">
                     <input
                       type="file"
@@ -428,6 +497,23 @@ export default function TemplatesContent() {
                       </span>
                     </Button>
                   </label>
+
+                  {/* Thumbnail Link Input */}
+                  <div className="flex-1 min-w-[240px]">
+                    <Label htmlFor="thumbnail_link" className="text-gray-700 font-medium">
+                      or Thumbnail Link
+                    </Label>
+                    <Input
+                      id="thumbnail_link"
+                      value={formData.thumbnail_path}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, thumbnail_path: e.target.value }))}
+                      placeholder="Paste a public URL or storage path (e.g., thumbnails/file.png)"
+                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Supports external URLs and Supabase Storage paths. Preview updates live.
+                    </p>
+                  </div>
 
                   {formData.thumbnail_path && (
                     <Button

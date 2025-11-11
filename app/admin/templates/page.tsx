@@ -43,51 +43,46 @@ export default function AdminTemplates() {
 
   useEffect(() => {
     fetchTemplates()
-  }, [])
+    // Subscribe to realtime changes in poster_templates
+    const channel = supabaseAdmin
+      .channel("realtime:poster_templates")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "poster_templates" },
+        (payload: any) => {
+          const newTemplate = payload.new as PosterTemplate
+          setTemplates((prev) => {
+            const next = prev.filter((t) => t.template_id !== newTemplate.template_id).concat(newTemplate)
+            return next.sort((a, b) => a.template_name.localeCompare(b.template_name))
+          })
+          showToast("New template added (realtime)", "success")
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "poster_templates" },
+        (payload: any) => {
+          const updated = payload.new as PosterTemplate
+          setTemplates((prev) =>
+            prev.map((t) => (t.template_id === updated.template_id ? { ...t, ...updated } : t)),
+          )
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "poster_templates" },
+        (payload: any) => {
+          const removed = payload.old as PosterTemplate
+          setTemplates((prev) => prev.filter((t) => t.template_id !== removed.template_id))
+        },
+      )
+      .subscribe()
 
-  // Realtime subscription to reflect template changes without manual refresh
-  useEffect(() => {
-    try {
-      const channel = supabaseAdmin
-        .channel("realtime:poster_templates")
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "poster_templates" },
-          (payload: any) => {
-            const newTemplate = payload?.new
-            if (!newTemplate?.template_id) return
-            setTemplates((prev) => {
-              const filtered = prev.filter((t) => t.template_id !== newTemplate.template_id)
-              return [newTemplate, ...filtered]
-            })
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "poster_templates" },
-          (payload: any) => {
-            const updated = payload?.new
-            if (!updated?.template_id) return
-            setTemplates((prev) => prev.map((t) => (t.template_id === updated.template_id ? updated : t)))
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "DELETE", schema: "public", table: "poster_templates" },
-          (payload: any) => {
-            const old = payload?.old
-            if (!old?.template_id) return
-            setTemplates((prev) => prev.filter((t) => t.template_id !== old.template_id))
-          },
-        )
-        .subscribe()
-
-      return () => {
-        try {
-          supabaseAdmin.removeChannel(channel)
-        } catch {}
-      }
-    } catch {}
+    return () => {
+      try {
+        supabaseAdmin.removeChannel(channel)
+      } catch {}
+    }
   }, [])
 
   const fetchTemplates = async () => {
@@ -108,6 +103,20 @@ export default function AdminTemplates() {
       showToast(`Failed to fetch templates: ${error.message}`, "error")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const refreshTemplates = async () => {
+    try {
+      setRefreshing(true)
+      const { data, error } = await supabaseAdmin.from("poster_templates").select("*").order("template_name")
+      if (error) throw error
+      setTemplates(data || [])
+      showToast("Templates refreshed successfully", "success")
+    } catch (error: any) {
+      showToast(`Failed to refresh templates: ${error.message}`, "error")
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -256,10 +265,9 @@ export default function AdminTemplates() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate file type (JPG, PNG, WEBP only)
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"]
-    if (!allowedTypes.includes(file.type)) {
-      showToast("Only JPG, PNG or WEBP images are allowed", "error")
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select a valid image file", "error")
       return
     }
 
@@ -271,9 +279,8 @@ export default function AdminTemplates() {
 
     try {
       setUploadingThumbnail(true)
-      const ext = (file.name.split(".").pop() || "png").toLowerCase()
-      const rand = Math.random().toString(36).slice(2, 8)
-      const fileName = `${(formData.template_id || "new").replace(/[^a-zA-Z0-9-_]/g, "_")}-${Date.now()}-${rand}.${ext}`
+      const ext = file.name.split(".").pop() || "png"
+      const fileName = `${formData.template_id || "new"}-${Date.now()}.${ext}`
 
       const { data, error } = await supabaseAdmin.storage
         .from("templates-thumbnails")
@@ -286,13 +293,11 @@ export default function AdminTemplates() {
       }
 
       const uploadedPath = data.path
-      const { data: pub } = supabaseAdmin.storage.from("templates-thumbnails").getPublicUrl(uploadedPath)
-      const publicUrl = pub?.publicUrl || uploadedPath
 
       if (editingTemplate?.template_id) {
         const { error: dbError } = await supabaseAdmin
           .from("poster_templates")
-          .update({ thumbnail_path: publicUrl })
+          .update({ thumbnail_path: uploadedPath })
           .eq("template_id", editingTemplate.template_id)
 
         if (dbError) {
@@ -307,7 +312,7 @@ export default function AdminTemplates() {
 
       setFormData((prev) => ({
         ...prev,
-        thumbnail_path: publicUrl,
+        thumbnail_path: uploadedPath,
       }))
     } catch (error: any) {
       // Silent failure; surface via toast only
@@ -340,37 +345,21 @@ export default function AdminTemplates() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-800">Poster Templates</h1>
         <div className="flex items-center gap-2">
-          <Button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Template
-          </Button>
           <Button
-            onClick={async () => {
-              try {
-                setRefreshing(true)
-                await fetchTemplates()
-                showToast("Templates refreshed", "success")
-              } catch (err: any) {
-                showToast(`Refresh failed: ${err?.message || "Unknown error"}`, "error")
-              } finally {
-                setRefreshing(false)
-              }
-            }}
+            onClick={refreshTemplates}
             variant="outline"
-            className="border-gray-300 text-gray-700 hover:bg-gray-100"
+            className="border-blue-300 text-blue-700 hover:bg-blue-50"
             disabled={refreshing}
           >
             {refreshing ? (
-              <span className="flex items-center">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700 mr-2" />
-                Refreshing
-              </span>
+              <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>Refreshing…</span>
             ) : (
-              <span className="flex items-center">
-                <Upload className="w-4 h-4 mr-2" />
-                Refresh Templates
-              </span>
+              <span className="flex items-center"><Upload className="w-4 h-4 mr-2" />Refresh Templates</span>
             )}
+          </Button>
+          <Button onClick={() => setIsCreating(true)} className="bg-blue-600 hover:bg-blue-700">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Template
           </Button>
         </div>
       </div>
@@ -472,12 +461,12 @@ export default function AdminTemplates() {
               <Label className="text-gray-700 font-medium mb-2 block">Thumbnail Image</Label>
 
               <div className="space-y-4">
-                {/* Upload Button */}
-                <div className="flex items-center gap-4">
+                {/* Upload Button + Thumbnail Link Field */}
+                <div className="flex items-center gap-4 flex-wrap">
                   <label className="cursor-pointer">
                     <input
                       type="file"
-                      accept="image/png,image/jpeg,image/webp"
+                      accept="image/*"
                       onChange={handleThumbnailUpload}
                       className="hidden"
                       disabled={uploadingThumbnail}
@@ -505,6 +494,23 @@ export default function AdminTemplates() {
                     </Button>
                   </label>
 
+                  {/* Thumbnail Link Input */}
+                  <div className="flex-1 min-w-[240px]">
+                    <Label htmlFor="thumbnail_link" className="text-gray-700 font-medium">
+                      or Thumbnail Link
+                    </Label>
+                    <Input
+                      id="thumbnail_link"
+                      value={formData.thumbnail_path}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, thumbnail_path: e.target.value }))}
+                      placeholder="Paste a public URL or storage path (e.g., thumbnails/file.png)"
+                      className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Supports external URLs and Supabase Storage paths. Preview updates live.
+                    </p>
+                  </div>
+
                   {formData.thumbnail_path && (
                     <Button
                       type="button"
@@ -515,45 +521,6 @@ export default function AdminTemplates() {
                       <X className="w-4 h-4 mr-2" />
                       Clear
                     </Button>
-                  )}
-                </div>
-
-                {/* Manual thumbnail URL input */}
-                <div className="mt-3">
-                  <Label htmlFor="thumbnail_url" className="text-gray-700 font-medium">
-                    Thumbnail URL (optional)
-                  </Label>
-                  <Input
-                    id="thumbnail_url"
-                    type="url"
-                    placeholder="Paste a public image URL"
-                    value={formData.thumbnail_path}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, thumbnail_path: e.target.value }))}
-                    className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-                  />
-                  {editingTemplate && (
-                    <div className="mt-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="border-gray-300 text-gray-700 hover:bg-gray-100"
-                        onClick={async () => {
-                          try {
-                            const { error } = await supabaseAdmin
-                              .from("poster_templates")
-                              .update({ thumbnail_path: formData.thumbnail_path })
-                              .eq("template_id", editingTemplate.template_id)
-                            if (error) throw error
-                            showToast("Thumbnail link saved", "success")
-                          } catch (err: any) {
-                            showToast(`Failed to save thumbnail link: ${err?.message || "Unknown error"}`, "error")
-                          }
-                        }}
-                      >
-                        Save Link
-                      </Button>
-                    </div>
                   )}
                 </div>
 
@@ -584,10 +551,10 @@ export default function AdminTemplates() {
                 <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded border">
                   <p className="font-medium mb-1">📝 Upload Instructions:</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Supported formats: JPG, PNG, WEBP</li>
+                    <li>Supported formats: JPG, PNG, GIF, WebP</li>
                     <li>Maximum file size: 5MB</li>
                     <li>Recommended dimensions: 400x300 pixels</li>
-                    <li>Images are stored in Supabase Storage (public bucket)</li>
+                    <li>Images will be stored as base64 in the database</li>
                   </ul>
                 </div>
               </div>
