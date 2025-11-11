@@ -14,8 +14,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
 
-    // Force test amount = 1 KSh during development and initial rollout
-    const normalizedAmount = 1
+    // Use dynamic template amount provided by client/session
+    const normalizedAmount = amount
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
