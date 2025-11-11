@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     const stk = await initiateStkPush({
       amount: normalizedAmount,
       phoneNumber: phone,
-      accountReference: "Poster Gen",
+      accountReference: String(session_id),
       transactionDesc: desc,
     })
 

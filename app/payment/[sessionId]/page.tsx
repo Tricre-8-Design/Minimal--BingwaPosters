@@ -11,7 +11,6 @@ import { Sparkles, ArrowLeft, Smartphone, CreditCard, CheckCircle, XCircle, Cloc
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { supabase, showToast } from "@/lib/supabase"
-import { isValidKenyaLocalPhone } from "@/lib/validation"
 
 export default function PaymentPage() {
   const params = useParams()
@@ -48,26 +47,27 @@ export default function PaymentPage() {
     return () => clearInterval(interval)
   }, [countdown])
 
-  // Auto-redirect to download page shortly after successful payment
-  useEffect(() => {
-    if (paymentStatus === "success") {
-      const t = setTimeout(() => {
-        router.push(`/download/${sessionId}`)
-      }, 1200)
-      return () => clearTimeout(t)
-    }
-  }, [paymentStatus, router, sessionId])
-
   const formatPhoneNumber = (value: string) => {
-    // Format as 07XX XXX XXX (10 digits)
-    const d = value.replace(/\D/g, "")
-    const parts = [d.slice(0, 2), d.slice(2, 4), d.slice(4, 7), d.slice(7, 10)].filter(Boolean)
-    return parts.join(" ")
+    // Remove all non-digits
+    const rawDigits = value.replace(/\D/g, "")
+    // Normalize 9-digit local (7/1) to 10-digit starting with 0
+    const normalizedDigits =
+      rawDigits.length === 9 && (rawDigits.startsWith("7") || rawDigits.startsWith("1"))
+        ? `0${rawDigits}`
+        : rawDigits
+
+    // Limit to 10 digits max
+    const d = normalizedDigits.slice(0, 10)
+
+    // Format as 07XX XXX XXX
+    if (d.length <= 4) return d
+    if (d.length <= 7) return `${d.slice(0, 4)} ${d.slice(4, 7)}`
+    return `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7, 10)}`
   }
 
   const validatePhoneNumber = (number: string) => {
-    // Accept 10-digit local Safaricom format starting with 07 or 01
-    return isValidKenyaLocalPhone(number)
+    const digits = number.replace(/\D/g, "")
+    return digits.length === 10 && (digits.startsWith("07") || digits.startsWith("01"))
   }
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,7 +87,9 @@ export default function PaymentPage() {
     setCountdown(60) // 60 second timeout
 
     try {
-      const fullPhoneNumber = `+254${mpesaNumber.replace(/\D/g, "")}`
+      // Send local format (07XXXXXXXX or 01XXXXXXXX) to backend; server will normalize
+      const digitsOnly = mpesaNumber.replace(/\D/g, "")
+      const localPhone = digitsOnly.length === 9 ? `0${digitsOnly}` : digitsOnly
 
       // Initiate STK Push via backend
       const res = await fetch("/api/mpesa/initiate", {
@@ -96,7 +98,7 @@ export default function PaymentPage() {
         body: JSON.stringify({
           session_id: sessionId,
           amount: sessionData.price,
-          phoneNumber: fullPhoneNumber,
+          phoneNumber: localPhone,
         }),
       })
 
@@ -107,29 +109,46 @@ export default function PaymentPage() {
 
       const checkoutId = json.CheckoutRequestID
 
-      // Poll for payment confirmation by session only to avoid receipt/code swaps
+      // Poll for payment confirmation
       let remaining = 60
       const poll = async () => {
-        const { data, error } = await supabase
+        // Check latest payment row for this session
+        const { data: pay, error: payErr } = await supabase
           .from("payments")
-          .select("status, mpesa_code, created_at")
+          .select("status, mpesa_code, id")
           .eq("session_id", sessionId)
           .order("created_at", { ascending: false })
           .limit(1)
           .single()
 
-        if (!error && data && data.status === "Paid") {
+        if (!payErr && pay && pay.status === "Paid") {
           setPaymentStatus("success")
           const updatedSession = {
             ...sessionData,
             paymentStatus: "completed",
             paymentTime: Date.now(),
-            mpesaNumber: fullPhoneNumber,
-            mpesaCode: checkoutId,
+            mpesaNumber: localPhone,
+            mpesaCode: pay.mpesa_code || checkoutId,
           }
           localStorage.setItem(sessionId, JSON.stringify(updatedSession))
+          // Redirect to download immediately on success
+          router.replace(`/download/${sessionId}`)
           return true
         }
+
+        // Fallback: check poster status
+        const { data: poster, error: posterErr } = await supabase
+          .from("generated_posters")
+          .select("status")
+          .eq("session_id", sessionId)
+          .limit(1)
+          .single()
+        if (!posterErr && poster?.status === "COMPLETED") {
+          setPaymentStatus("success")
+          router.replace(`/download/${sessionId}`)
+          return true
+        }
+
         return false
       }
 
@@ -252,8 +271,6 @@ export default function PaymentPage() {
                     value={mpesaNumber}
                     onChange={handlePhoneChange}
                     placeholder="07XX XXX XXX"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
                     className="glass text-white placeholder-blue-300 border-white/20 focus:border-green-400 focus:neon-green transition-all duration-300 font-inter text-lg py-3"
                   />
                   <p className="text-sm text-blue-300 mt-1 font-inter">
@@ -353,7 +370,6 @@ export default function PaymentPage() {
                     Download Your Poster
                   </Button>
                 </Link>
-                <p className="text-blue-300 font-inter">Redirecting…</p>
               </div>
             </Card>
           )}

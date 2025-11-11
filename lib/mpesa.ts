@@ -103,19 +103,35 @@ export function buildPassword(shortcode: string, passkey: string, timestamp: str
   return Buffer.from(`${shortcode}${passkey}${timestamp}`).toString("base64")
 }
 
-// Normalize phone numbers to 2547XXXXXXXX (no plus)
+// Normalize phone numbers to 254XXXXXXXXX (no plus) for Safaricom/Telkom/Airtel
+// Accepts formats: 07XXXXXXXX, 01XXXXXXXX, 7XXXXXXXX, 1XXXXXXXX, +2547XXXXXXXX, 2547XXXXXXXX, 2540XXXXXXXX
+// Ensures we NEVER keep the leading 0 after country code (i.e., 2540XXXXXXXX -> 254XXXXXXXX)
 export function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "")
-  if (digits.startsWith("0")) {
-    return `254${digits.slice(1)}`
+  const raw = String(phone || "")
+  const digits = raw.replace(/\D/g, "")
+
+  // Handle country code with accidental leading 0: 2540XXXXXXXX -> 254XXXXXXXX
+  if (digits.startsWith("2540")) {
+    return `254${digits.slice(4)}`
   }
+
+  // Already in proper country format
   if (digits.startsWith("254")) {
     return digits
   }
+
+  // Local format starting with 0 (07XXXXXXXX or 01XXXXXXXX)
+  if (digits.startsWith("0")) {
+    const rest = digits.slice(1)
+    return `254${rest}`
+  }
+
+  // Local format without 0 (7XXXXXXXX or 1XXXXXXXX)
   if (digits.startsWith("7") || digits.startsWith("1")) {
     return `254${digits}`
   }
-  // Fallback: return digits
+
+  // Fallback: return digits as-is
   return digits
 }
 
