@@ -277,6 +277,12 @@ public/
 - If you re-enable tests, use `Vitest` for unit tests and `Playwright` for e2e.
 - Scripts remain in `package.json` but are currently non-functional without test files.
 
+### Maintenance Mode Tests
+
+- Unit tests: `lib/__tests__/maintenance.test.ts` cover boolean parsing, IP allowlist, and bypass logic.
+- E2E example (Playwright): `e2e/maintenance.spec.ts` (run with `npm run e2e`) — verifies redirect behavior when maintenance is enabled.
+  - Ensure the dev server is running and `MAINTENANCE_MODE=true` in `.env.local`.
+
 ### Headline Text Transition
 
 - The home page headline uses a rotating text transition for short phrases, implemented via `HeadlineRotator`.
@@ -367,6 +373,14 @@ Configure these variables in `.env.local` (do not commit):
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL.
 - `SUPABASE_SERVICE_ROLE_KEY` — service role key for server-side operations (private logging).
 - `LOG_WEBHOOK_URL` — optional webhook for error logs.
+
+#### Maintenance Mode
+- `MAINTENANCE_MODE` — `true` or `false` to toggle maintenance.
+- `MAINTENANCE_ALLOWED_IPS` — comma-separated IPs allowed during maintenance (e.g., `127.0.0.1,10.0.0.5`).
+- `MAINTENANCE_ACTIVATED_AT` — ISO timestamp or friendly string shown on the maintenance page.
+- `MAINTENANCE_ESTIMATED_UNTIL` — optional friendly estimate (e.g., `Today at 4:00 PM EAT`).
+- `MAINTENANCE_CONTACT_EMAIL` — contact email to display.
+- `MAINTENANCE_CONTACT_PHONE` — optional contact phone number.
 
 ### Troubleshooting
 - Middleware module error:
