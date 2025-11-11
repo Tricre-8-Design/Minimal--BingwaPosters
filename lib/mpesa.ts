@@ -14,6 +14,32 @@ function resolveEnv(): MpesaEnvironment {
 
 const MPESA_ENV: MpesaEnvironment = resolveEnv()
 
+type MpesaTransactionType = "CustomerPayBillOnline" | "CustomerBuyGoodsOnline"
+
+function resolveTransactionType(): MpesaTransactionType {
+  const raw = String(process.env.MPESA_TRANSACTION_TYPE || "").trim().toLowerCase()
+  if (raw === "customerbuygoodsonline") return "CustomerBuyGoodsOnline"
+  // Default to PayBill
+  return "CustomerPayBillOnline"
+}
+
+function sanitizeAccountReference(ref: string): string {
+  // Allow alphanumeric and spaces; max 20 chars per Daraja guidance
+  const cleaned = String(ref || "")
+    .replace(/[^A-Za-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  const truncated = cleaned.slice(0, 20)
+  return truncated || `POSTER${Date.now().toString().slice(-6)}`
+}
+
+function sanitizeTransactionDesc(desc: string): string {
+  // Allow alphanumeric and spaces; keep short (<=20)
+  const cleaned = String(desc || "").replace(/[^A-Za-z0-9\s]/g, "").trim()
+  const truncated = cleaned.slice(0, 20)
+  return truncated || "Poster payment"
+}
+
 // In-memory token cache (per server instance)
 let cachedToken: { token: string; expiresAt: number } | null = null
 
@@ -49,6 +75,7 @@ export async function getMpesaAccessToken(): Promise<{ token: string; envUsed: M
   const basic = Buffer.from(`${key}:${secret}`).toString("base64")
   let envTried: MpesaEnvironment = MPESA_ENV
   const oauthUrl = getOauthUrl(envTried)
+  try { console.log(`[${new Date().toISOString()}] [mpesa/oauth] request_start env=${envTried} url=${oauthUrl}`) } catch {}
   let res = await fetch(oauthUrl, {
     method: "GET",
     headers: {
@@ -60,6 +87,7 @@ export async function getMpesaAccessToken(): Promise<{ token: string; envUsed: M
   // Fallback to sandbox if production fails (common misconfig)
   if (!res.ok && envTried === "production") {
     const body = await res.text()
+    try { console.error(`[${new Date().toISOString()}] [mpesa/oauth] production_failed status=${res.status} body=${body.slice(0,200)}`) } catch {}
     envTried = "sandbox"
     res = await fetch(getOauthUrl(envTried), {
       method: "GET",
@@ -69,6 +97,7 @@ export async function getMpesaAccessToken(): Promise<{ token: string; envUsed: M
 
   if (!res.ok) {
     const body = await res.text()
+    try { console.error(`[${new Date().toISOString()}] [mpesa/oauth] failed status=${res.status} body=${body.slice(0,200)}`) } catch {}
     throw new Error(`M-Pesa OAuth failed: ${res.status} ${body}`)
   }
 
@@ -76,10 +105,12 @@ export async function getMpesaAccessToken(): Promise<{ token: string; envUsed: M
   const json = (await res.json()) as { access_token?: string; expires_in?: string }
   const token = json?.access_token
   if (!token) {
+    try { console.error(`[${new Date().toISOString()}] [mpesa/oauth] success_missing_token env=${envTried} json_keys=${Object.keys(json||{}).join(',')}`) } catch {}
     throw new Error(`M-Pesa OAuth succeeded but access_token is missing from response on ${envTried}`)
   }
   const expiresInSec = parseInt(json.expires_in || "3599", 10)
   cachedToken = { token, expiresAt: now + expiresInSec * 1000 }
+  try { console.log(`[${new Date().toISOString()}] [mpesa/oauth] success env=${envTried} ttl_sec=${expiresInSec}`) } catch {}
   return { token, envUsed: envTried }
 }
 
@@ -159,22 +190,30 @@ export async function initiateStkPush({
   const timestamp = buildTimestamp()
   const password = buildPassword(shortcode, passkey, timestamp)
   const phone = normalizePhone(phoneNumber)
+  const txType = resolveTransactionType()
+  const acctRef = sanitizeAccountReference(accountReference)
+  const txDesc = sanitizeTransactionDesc(transactionDesc)
 
   const payload = {
     BusinessShortCode: shortcode,
     Password: password,
     Timestamp: timestamp,
-    TransactionType: "CustomerPayBillOnline", // Daraja expected value
+    TransactionType: txType,
     Amount: amount,
     PartyA: phone,
     PartyB: shortcode,
     PhoneNumber: phone,
     CallBackURL: callbackUrl,
-    AccountReference: accountReference,
-    TransactionDesc: transactionDesc,
+    AccountReference: acctRef,
+    TransactionDesc: txDesc,
   }
 
   const stkUrl = getStkPushUrl(envUsed)
+  try {
+    console.log(
+      `[${new Date().toISOString()}] [mpesa/stk] request_start env=${envUsed} url=${stkUrl} amount=${amount} phone=${phone} accountRef=${acctRef} txType=${txType}`,
+    )
+  } catch {}
   const res = await fetch(stkUrl, {
     method: "POST",
     headers: {
@@ -193,9 +232,18 @@ export async function initiateStkPush({
   }
 
   if (!res.ok) {
+    try {
+      console.error(
+        `[${new Date().toISOString()}] [mpesa/stk] failed status=${res.status} body_keys=${Object.keys(json||{}).join(',')}`,
+      )
+    } catch {}
     throw new Error(`STK Push failed: ${res.status} ${JSON.stringify(json)}`)
   }
-
+  try {
+    console.log(
+      `[${new Date().toISOString()}] [mpesa/stk] success status=${res.status} CheckoutRequestID=${json?.CheckoutRequestID} MerchantRequestID=${json?.MerchantRequestID}`,
+    )
+  } catch {}
   return json
 }
 
