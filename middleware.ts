@@ -2,10 +2,7 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { verifyAdminToken } from "./lib/auth/session"
 import { logError } from "./lib/server-errors"
-
-function isTrue(value: string | undefined): boolean {
-  return String(value || "").toLowerCase() === "true"
-}
+import { evaluateMaintenanceMode, parseAllowedIps, shouldBypassMaintenance } from "./lib/maintenance"
 
 function getClientIp(req: NextRequest): string {
   // Prefer x-forwarded-for; fallback to req.ip if available
@@ -29,24 +26,22 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Maintenance mode gate — applies to all non-admin paths
-  const maintenanceEnabled = isTrue(process.env.MAINTENANCE_MODE)
-  if (maintenanceEnabled) {
-    const allowedIps = (process.env.MAINTENANCE_ALLOWED_IPS || "")
-      .split(",")
-      .map(s => s.trim())
-      .filter(Boolean)
+  const evalResult = evaluateMaintenanceMode(process.env.MAINTENANCE_MODE)
+  // Console warnings for misconfiguration (case variation, invalid, missing)
+  for (const w of evalResult.warnings) {
+    console.warn(`[maintenance] ${w}`)
+    await logError({ source: "middleware/maintenance/env", error: new Error(w), statusCode: 200 })
+  }
+  if (evalResult.enabled) {
+    const allowedIps = parseAllowedIps(process.env.MAINTENANCE_ALLOWED_IPS)
+    const ip = getClientIp(req) || null
+    const bypass = shouldBypassMaintenance(pathname, ip, allowedIps)
 
-    const ip = getClientIp(req)
-    const isIpAllowed = ip && allowedIps.includes(ip)
-
-    const bypass = isAdminPath(pathname) || isMaintenancePage(pathname) || isIpAllowed
-
-    // Log all access attempts during maintenance
     await logError({
       source: "middleware/maintenance",
       error: new Error(bypass ? "Maintenance access allowed" : "Maintenance access blocked"),
       statusCode: bypass ? 200 : 503,
-      meta: { pathname, ip, isIpAllowed },
+      meta: { pathname, ip, allowedIps: Array.from(allowedIps.values()) },
     })
 
     if (!bypass) {
@@ -116,6 +111,6 @@ export async function middleware(req: NextRequest) {
 export const config = {
   // Apply middleware broadly, excluding Next.js internals and common static assets
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
   ],
 }

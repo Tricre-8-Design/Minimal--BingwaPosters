@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js"
 import { uploadDataUrlToAssets, resolveAssetPublicUrl } from "@/lib/storage"
 import { PosterStatus, type PosterStatusType } from "@/lib/status"
 import { safeErrorResponse } from "@/lib/server-errors"
+import { logInfo, logStep, logError, startTimer, elapsedMs, safeRedact } from "@/lib/logger"
 
 // POST /api/generate
 // Input: { template_id, input_data, session_id }
@@ -12,22 +13,33 @@ import { safeErrorResponse } from "@/lib/server-errors"
 
 export async function POST(req: Request) {
   try {
+    const t0 = startTimer()
+    logStep("api/generate", "request_received")
     const { template_uuid, input_data, session_id, template_id } = await req.json()
+    logInfo("api/generate", "request_parsed", {
+      session_id,
+      template_uuid,
+      template_id,
+      input_data: safeRedact(input_data),
+    })
 
     // Incoming request parsed successfully
 
     if (!template_uuid || !input_data || !session_id) {
+      logError("api/generate", new Error("Missing required fields"), { session_id, template_uuid, template_id })
       return NextResponse.json({ success: false, error: "Missing required fields" }, { status: 400 })
     }
 
     const placidKey = process.env.PLACID_API_KEY
     if (!placidKey) {
+      logError("api/generate", new Error("PLACID_API_KEY not configured"), { session_id })
       return NextResponse.json({ success: false, error: "PLACID_API_KEY not configured" }, { status: 500 })
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     const supabaseAdmin = createClient(supabaseUrl, serviceKey)
+    logStep("api/generate", "supabase_client_initialized", { url_set: !!supabaseUrl })
 
     // Fetch template to know which fields are images and to get template_name
     let templateRow: any = null
@@ -49,6 +61,14 @@ export async function POST(req: Request) {
         .single()
       templateRow = tRow2 || null
     }
+    logInfo("api/generate", "template_resolved", {
+      session_id,
+      template_id: templateRow?.template_id,
+      template_uuid: templateRow?.template_uuid,
+      template_name: templateRow?.template_name,
+      fields_count: Array.isArray(templateRow?.fields_required) ? templateRow.fields_required.length : 0,
+      t_elapsed_ms: elapsedMs(t0),
+    })
     const templateName = templateRow?.template_name || null
     const fieldsRequired: Array<{ name: string; type: string }> = templateRow?.fields_required || []
 
@@ -59,6 +79,8 @@ export async function POST(req: Request) {
     )
 
     if (input_data && typeof input_data === "object") {
+      let imageUploads = 0
+      let textLayers = 0
       for (const [key, val] of Object.entries(input_data)) {
         try {
           if (imageFieldNames.has(key)) {
@@ -66,9 +88,11 @@ export async function POST(req: Request) {
             if (typeof val === "string" && val.startsWith("data:image")) {
               const { publicUrl } = await uploadDataUrlToAssets(val, { sessionId: session_id, fieldName: key })
               layers[key] = { image: publicUrl }
+              imageUploads++
             } else if (typeof val === "string") {
               const resolved = resolveAssetPublicUrl(val)
               layers[key] = { image: resolved }
+              imageUploads++
             } else {
               layers[key] = { image: "" }
             }
@@ -79,16 +103,26 @@ export async function POST(req: Request) {
             } else {
               layers[key] = { text: String(val) }
             }
+            textLayers++
           }
         } catch (e: any) {
           // Fallback to empty text/image
           layers[key] = imageFieldNames.has(key) ? { image: "" } : { text: "" }
+          logError("api/generate", e, { when: "layer_build", field: key })
         }
       }
+      logInfo("api/generate", "layers_prepared", { imageUploads, textLayers, totalLayers: Object.keys(layers).length })
     }
     // Layers prepared
 
     // Call Placid 2.0 REST API to generate image
+    const tPlacid = startTimer()
+    logStep("api/generate", "placid_request_start", {
+      endpoint: "https://api.placid.app/api/rest/images",
+      template_uuid,
+      has_webhook_success: !!process.env.PLACID_WEBHOOK_SUCCESS_URL,
+      passthrough: safeRedact({ session_id, template_id: template_id ?? null, template_uuid }),
+    })
     const placidResponse = await fetch("https://api.placid.app/api/rest/images", {
       method: "POST",
       headers: {
@@ -112,6 +146,12 @@ export async function POST(req: Request) {
     })
 
     const placidData = await placidResponse.json().catch(() => ({}))
+    logInfo("api/generate", "placid_response", {
+      status: placidResponse.status,
+      ok: placidResponse.ok,
+      elapsed_ms: elapsedMs(tPlacid),
+      bodyKeys: placidData ? Object.keys(placidData) : [],
+    })
     if (!placidResponse.ok) {
       const message = placidData?.error || placidResponse.statusText
       // Attempt to record failure in Supabase
@@ -123,6 +163,7 @@ export async function POST(req: Request) {
     const data = placidData?.data || placidData
     const id = data?.id
     const url = data?.url || data?.download_url || data?.result_url || data?.image?.url || null
+    logInfo("api/generate", "placid_result_parsed", { id, hasUrl: !!url })
     // Save result to Supabase and include template_name and status
     await writePoster({
       session_id,
@@ -133,9 +174,12 @@ export async function POST(req: Request) {
       // New flow: initial status is PENDING; when image becomes available, we gate with AWAITING_PAYMENT
       status: url ? PosterStatus.AWAITING_PAYMENT : PosterStatus.PENDING,
     })
+    logStep("api/generate", "supabase_write_done", { hasUrl: !!url, t_total_ms: elapsedMs(t0) })
 
+    logStep("api/generate", "respond_200", { session_id, hasUrl: !!url })
     return NextResponse.json({ success: true, image_url: url, session_id })
   } catch (error: any) {
+    logError("api/generate", error)
     return await safeErrorResponse(
       "api/generate",
       error,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { PosterStatus } from "@/lib/status"
 import { safeErrorResponse, logError } from "@/lib/server-errors"
+import { logInfo, logStep, safeRedact } from "@/lib/logger"
 
 // POST /api/make/placid-callback
 // Make.com/Placid sends back the final image URL for a given session.
@@ -14,6 +15,7 @@ import { safeErrorResponse, logError } from "@/lib/server-errors"
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null)
+    logStep("api/placid-callback", "request_received")
     if (!body) {
       return NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 })
     }
@@ -49,6 +51,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Missing image_url" }, { status: 400 })
     }
 
+    logInfo("api/placid-callback", "payload_parsed", {
+      status,
+      session_id,
+      has_image_url: !!image_url,
+      passthrough_keys: body?.passthrough ? Object.keys(typeof body.passthrough === "object" ? body.passthrough : {}) : [],
+      raw_keys: Object.keys(body || {}),
+    })
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     if (!supabaseUrl || !serviceKey) {
@@ -56,6 +66,7 @@ export async function POST(req: Request) {
     }
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey)
+    logStep("api/placid-callback", "supabase_client_initialized")
 
     if (session_id) {
       // Try update existing by session_id; if not found, upsert
@@ -74,6 +85,7 @@ export async function POST(req: Request) {
 
       // Idempotency: if image_url is already set and equals the incoming URL, do nothing.
       if (existing && existing.image_url && existing.image_url === image_url) {
+        logInfo("api/placid-callback", "idempotent_update_skipped", { session_id })
         return NextResponse.json({ success: true, updated: false, idempotent: true }, { status: 200 })
       }
 
@@ -88,6 +100,7 @@ export async function POST(req: Request) {
           })
           return NextResponse.json({ success: false, error: "Failed to persist URL" }, { status: 500 })
         }
+        logStep("api/placid-callback", "update_done", { session_id })
         return NextResponse.json({ success: true, updated: true }, { status: 200 })
       }
 
@@ -105,12 +118,16 @@ export async function POST(req: Request) {
       }
 
       const verified = await verifyPosterUrl(supabaseAdmin, session_id)
+      logInfo("api/placid-callback", "upsert_done_verified", { session_id, verified })
       return NextResponse.json({ success: true, upserted: true, verified }, { status: 200 })
     }
 
     // If we cannot link to a session (no passthrough/meta), acknowledge success so Placid doesn't retry.
+    logInfo("api/placid-callback", "ack_without_link", { body: safeRedact(body) })
     return NextResponse.json({ success: true, linked: false }, { status: 200 })
   } catch (error: any) {
+    // Console logging (server errors utility already records externally)
+    try { console.error(`[${new Date().toISOString()}] [api/placid-callback] ERROR`, error) } catch {}
     return safeErrorResponse(
       "api/placid-callback",
       error,

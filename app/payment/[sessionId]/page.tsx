@@ -11,6 +11,7 @@ import { Sparkles, ArrowLeft, Smartphone, CreditCard, CheckCircle, XCircle, Cloc
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { supabase, showToast } from "@/lib/supabase"
+import { logInfo, logError, safeRedact, startTimer, elapsedMs } from "@/lib/logger"
 
 export default function PaymentPage() {
   const params = useParams()
@@ -105,9 +106,11 @@ export default function PaymentPage() {
     setCountdown(60) // 60 second timeout
 
     try {
+      const t0 = startTimer()
       // Send local format (07XXXXXXXX or 01XXXXXXXX) to backend; server will normalize
       const digitsOnly = mpesaNumber.replace(/\D/g, "")
       const localPhone = digitsOnly.length === 9 ? `0${digitsOnly}` : digitsOnly
+      logInfo("ui/payment", "initiate_click", { session_id: sessionId, phone_local: localPhone, price: sessionData?.price })
 
       // Initiate STK Push via backend
       const res = await fetch("/api/mpesa/initiate", {
@@ -120,11 +123,13 @@ export default function PaymentPage() {
       })
 
       const json = await res.json()
+      logInfo("ui/payment", "initiate_response", { status: res.status, ok: res.ok, keys: Object.keys(json || {}), elapsed_ms: elapsedMs(t0) })
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Failed to initiate payment")
       }
 
       const checkoutId = json.CheckoutRequestID
+      logInfo("ui/payment", "checkout_id_received", { CheckoutRequestID: checkoutId, MerchantRequestID: json.MerchantRequestID })
 
       // Poll for payment confirmation
       let remaining = 60
@@ -139,6 +144,7 @@ export default function PaymentPage() {
           .single()
 
         if (!payErr && pay && pay.status === "Paid") {
+          logInfo("ui/payment", "paid_detected", { payment_id: pay.id, mpesa_code: pay.mpesa_code })
           setPaymentStatus("success")
           const updatedSession = {
             ...sessionData,
@@ -161,11 +167,13 @@ export default function PaymentPage() {
           .limit(1)
           .single()
         if (!posterErr && poster?.status === "COMPLETED") {
+          logInfo("ui/payment", "poster_completed", { session_id: sessionId })
           setPaymentStatus("success")
           router.replace(`/download/${sessionId}`)
           return true
         }
 
+        logInfo("ui/payment", "poll_pending", { remaining })
         return false
       }
 
@@ -175,6 +183,7 @@ export default function PaymentPage() {
         if (done || remaining <= 0) {
           clearInterval(interval)
           if (!done) {
+            logInfo("ui/payment", "poll_timeout", { session_id: sessionId })
             setPaymentStatus("failed")
           }
         }
@@ -182,6 +191,7 @@ export default function PaymentPage() {
     } catch (error: any) {
       // Show a friendly error toast without exposing internals
       const msg = error?.message?.trim() || "Payment could not be initiated. Please try again."
+      logError("ui/payment", error, { session_id: sessionId })
       showToast(msg, "error")
       setPaymentStatus("failed")
     } finally {

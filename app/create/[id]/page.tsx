@@ -28,6 +28,7 @@ import { fetchJsonFriendly } from "@/lib/client-errors"
 import { PosterStatus, type PosterStatusType } from "@/lib/status"
 import { motion, AnimatePresence } from "framer-motion"
 import dynamic from "next/dynamic"
+import { logInfo, logError, safeRedact, startTimer, elapsedMs } from "@/lib/logger"
 
 // Dynamically import GenerationStatus with SSR disabled to prevent server-side vendor-chunk resolution
 // Use a stable relative path to avoid alias resolution issues during chunking in dev/prod.
@@ -244,6 +245,13 @@ export default function CreatePoster() {
     }, 1500)
 
     try {
+      const t0 = startTimer()
+      logInfo("ui/create", "generate_click", {
+        session_id: sessionId,
+        template_id: template.template_id,
+        template_uuid: template.template_uuid,
+        input_data: safeRedact(formData),
+      })
 
       const result = await fetchJsonFriendly<{ success: boolean; image_url?: string | null; session_id?: string }>(
         "/api/generate",
@@ -261,18 +269,22 @@ export default function CreatePoster() {
       )
 
       if (!result.ok) {
+        logError("ui/create", new Error(result.message || "generate_failed"), { session_id: sessionId })
         throw new Error(result.message || "Failed to generate poster via Placid")
       }
 
       const body = result.data || {}
+      logInfo("ui/create", "generate_response", { elapsed_ms: elapsedMs(t0), has_url: !!body.image_url, session_id: body.session_id })
       if (body.image_url) {
         setGeneratedPoster(body.image_url)
         showToast("Poster generated successfully!", "success")
         setIsGenerating(false)
       } else {
         // No immediate image_url: generation queued. Rely on realtime updates without sending a notify toast.
+        logInfo("ui/create", "generation_queued", { session_id: sessionId })
       }
     } catch (err: any) {
+      logError("ui/create", err, { session_id: sessionId })
       showToast("We couldn’t generate your poster right now.", "error")
       setError("Failed to generate poster. Please try again.")
     } finally {
