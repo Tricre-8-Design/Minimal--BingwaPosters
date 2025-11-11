@@ -51,6 +51,7 @@ export default function MaintenancePage() {
         )}
 
         <div className="bg-white/10 border border-white/20 rounded-lg p-4 text-left inline-block w-full backdrop-blur">
+          <center>
           <p className="text-white font-medium">Need something urgently?</p>
           <ul className="mt-2 text-white/90 list-disc list-inside">
             <li>
@@ -62,6 +63,7 @@ export default function MaintenancePage() {
               </li>
             )}
           </ul>
+          </center>
         </div>
 
         <footer className="mt-8 text-xs text-white/70">
