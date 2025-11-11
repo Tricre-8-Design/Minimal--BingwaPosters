@@ -81,11 +81,14 @@ export default function DownloadPage() {
         .from("poster_templates")
         .select("*")
         .eq("is_active", true)
-        .limit(3)
+        .limit(12)
 
       if (error) throw error
 
-      setSuggestedTemplates(data || [])
+      // Shuffle and pick 6–8 templates for display
+      const shuffled = (data || []).sort(() => Math.random() - 0.5)
+      const pickCount = Math.min(8, Math.max(6, shuffled.length))
+      setSuggestedTemplates(shuffled.slice(0, pickCount))
     } catch (err) {
       // silently ignore suggestions errors to avoid exposing internals
     }
@@ -242,6 +245,55 @@ export default function DownloadPage() {
             Download Poster
           </Button>
         </div>
+        {/* Suggested Posters Section */}
+        <div className="max-w-7xl mx-auto mt-12">
+          <h2 className="text-center text-2xl md:text-3xl font-bold text-white font-space mb-6">Suggested Posters</h2>
+          {showSuggestions && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+              {suggestedTemplates.map((template) => (
+                <Card key={template.template_id} className="glass p-4">
+                  <div className="aspect-[3/4] w-full overflow-hidden rounded-md">
+                    <img
+                      src={getThumbnailUrl(template.thumbnail_path)}
+                      alt={template.template_name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.src = "/placeholder.svg"
+                      }}
+                    />
+                  </div>
+                  <div className="mt-3">
+                    <h3 className="text-base md:text-lg font-bold text-white font-space line-clamp-2">
+                      {template.template_name}
+                    </h3>
+                    {template.description && (
+                      <p className="text-sm text-blue-200 font-inter mt-1 line-clamp-2">{template.description}</p>
+                    )}
+                    <div className="mt-3">
+                      <Link href={`/templates/${template.template_id}`}>
+                        <Button className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple w-full">
+                          View Template
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+          {/* Dashboard Button */}
+          <div className="mt-10 flex justify-center">
+            <a
+              href="https://bingwazone.co.ke/login.php"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block"
+            >
+              <Button className="glass text-white hover:neon-blue">Go back to Dashboard</Button>
+            </a>
+          </div>
+        </div>
         {/* Feedback Modal */}
         <Dialog.Root open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
           <Dialog.Portal>
@@ -288,33 +340,7 @@ export default function DownloadPage() {
             </Dialog.Content>
           </Dialog.Portal>
         </Dialog.Root>
-        {showSuggestions && (
-          <div className="max-w-7xl mx-auto flex justify-center items-center mt-8">
-            <h2 className="text-2xl font-bold text-white mb-4 font-space">Suggested Templates</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {suggestedTemplates.map((template) => (
-                <Card key={template.template_id} className="glass p-4 text-center">
-                  <img
-                    src={getThumbnailUrl(template.thumbnail_path)}
-                    alt={template.template_name}
-                    className="max-w-full max-h-full mb-4"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement
-                      target.src = "/placeholder.svg"
-                    }}
-                  />
-                  <h3 className="text-xl font-bold text-white mb-2 font-space">{template.template_name}</h3>
-                  <p className="text-blue-200 mb-4 font-inter">{template.description}</p>
-                  <Link href={`/templates/${template.template_id}`}>
-                    <Button className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple">
-                      View Template
-                    </Button>
-                  </Link>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Suggestions moved above; removed old block */}
       </div>
     </div>
   )
