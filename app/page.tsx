@@ -220,9 +220,11 @@ export default function HomePage() {
       <nav className="sticky top-0 z-50 p-4 md:p-6 border-b border-white/10 bg-white/10 backdrop-blur-md transition-all duration-300 supports-[backdrop-filter]:bg-white/10">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center space-x-2 group cursor-pointer">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-white/25 transition-all duration-300 group-hover:scale-105 backdrop-blur-sm">
-              <Sparkles className="w-5 h-5 text-white animate-pulse" />
-            </div>
+            <img
+              src="/logo.svg"
+              alt="Bingwa Posters Logo"
+              className="w-12 h-12 object-contain rounded-xl shadow-lg group-hover:shadow-white/25 transition-all duration-300 group-hover:scale-105 backdrop-blur-sm"
+            />
             <span className="text-white font-bold text-xl font-space tracking-tight transition-colors drop-shadow-md">Bingwa Posters</span>
           </div>
 
@@ -268,7 +270,7 @@ export default function HomePage() {
                 <Search className="absolute left-4 text-text-muted w-5 h-5" />
                 <Input
                   type="text"
-                  placeholder="Search templates... (e.g., 'business', 'colorful')"
+                  placeholder="Search templates... (e.g., 'weekend', 'minutes')"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-12 pr-4 py-6 border-none bg-transparent focus-visible:ring-0 text-lg placeholder:text-text-muted/70 w-full rounded-xl text-text-primary shadow-none hover:bg-transparent"
