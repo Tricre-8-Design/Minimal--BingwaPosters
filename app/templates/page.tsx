@@ -28,6 +28,9 @@ import { supabase, type PosterTemplate, getThumbnailUrl } from "@/lib/supabase"
 import { Badge } from "@/components/ui/badge"
 import { friendlyToastError } from "@/lib/client-errors"
 
+import { BackgroundWrapper } from "@/components/ui/background-wrapper"
+import LoadingScreen from "@/components/loading-screen"
+
 export default function TemplateGallery() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
@@ -191,59 +194,32 @@ export default function TemplateGallery() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen site-gradient-bg flex items-center justify-center">
-        <div className="text-center space-y-4">
-          {/* Ripple loader for template loading */}
-          {/* Using a lightweight inline ripple with Tailwind and simple keyframes to avoid extra deps here */}
-          <div className="relative mx-auto" style={{ width: 120, height: 120 }} aria-label="Loading templates">
-            <span className="absolute inset-0 rounded-full border-4 border-purple-400/80 animate-[ping_1.6s_ease-out_infinite]" />
-            <span className="absolute inset-0 rounded-full border-4 border-blue-400/80 animate-[ping_1.6s_ease-out_infinite]" style={{ transform: 'scale(0.7)' }} />
-            <span className="absolute inset-0 rounded-full bg-purple-500/80" style={{ width: 16, height: 16, top: '50%', left: '50%', transform: 'translate(-50%, -50%)', borderRadius: 9999 }} />
-          </div>
-          <p className="text-white font-space text-xl">Loading Posters...</p>
-          <p className="text-blue-200 font-inter text-sm">Getting All Bingwa Posters...</p>
-          {updatedNotice && (
-            <span className="mt-2 inline-block rounded-full bg-white/10 px-3 py-1 text-xs text-blue-100">Updated</span>
-          )}
-        </div>
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   if (error) {
     return (
-      <div className="min-h-screen site-gradient-bg flex items-center justify-center">
-        <Card className="glass p-8 text-center max-w-md">
+      <BackgroundWrapper className="flex items-center justify-center">
+        <Card className="p-8 text-center max-w-md">
           <div className="text-4xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-white mb-2 font-space">Can’t load templates</h2>
-          <p className="text-blue-200 mb-4 font-inter">{error}</p>
+          <h2 className="text-2xl font-bold text-text-primary mb-2 font-space">Can’t load templates</h2>
+          <p className="text-text-secondary mb-4 font-inter">{error}</p>
           <div className="space-y-2">
             <Button
               onClick={() => fetchTemplates()}
-              className="w-full bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple"
+              className="w-full bg-primary hover:bg-primary-hover text-white shadow-glowOrange"
             >
               <Zap className="w-4 h-4 mr-2" />
               Try Again
             </Button>
-            <p className="text-xs text-blue-300 font-inter">
-              Aii. Kuna kitu imefanyika. Check your internet connection as we check our side.
-            </p>
           </div>
         </Card>
-      </div>
+      </BackgroundWrapper>
     )
   }
 
   return (
-    <div className="min-h-screen site-gradient-bg relative overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
-      </div>
-
+    <BackgroundWrapper>
       {/* Navigation */}
       <nav className="relative z-10 p-4 md:p-6">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -251,85 +227,76 @@ export default function TemplateGallery() {
             <Link href="/">
               <Button
                 size="icon"
-                className="glass btn-interactive text-white hover:neon-blue transition-all duration-300"
+                variant="outline"
+                className="w-10 h-10"
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-blue-400 rounded-lg flex items-center justify-center neon-purple">
+              <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
                 <Sparkles className="w-5 h-5 text-white animate-pulse" />
               </div>
-              <span className="text-white font-bold text-xl font-space">Bingwa Posters</span>
+              <span className="text-white font-bold text-xl font-space drop-shadow-md">Bingwa Posters</span>
             </div>
           </div>
 
           <Button
             onClick={refreshTemplates}
             disabled={refreshing}
-            className="glass btn-interactive text-white hover:neon-blue transition-all duration-300"
+            className="bg-primary hover:bg-primary-hover text-white shadow-glowOrange transition-all duration-300"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          {recentlyRefreshed && (
-            <Badge variant="outline" className="ml-3 bg-white/10 text-white border-white/20">
-              Updated
-            </Badge>
-          )}
         </div>
       </nav>
 
       {/* Header Section */}
-      <section className="relative z-10 px-4 md:px-6 py-8 section-fade-in scroll-fade-in">
+      <section className="relative z-10 px-4 md:px-6 py-8">
         <div className="max-w-7xl mx-auto text-center">
-          {/* Humorous, engaging header + tagline */}
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-3 animate-in fade-in-0 slide-in-from-top-4 duration-1000 font-space">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-3 font-space drop-shadow-lg">
             Posters that pop. Without the drama.
           </h1>
-          <p className="text-lg md:text-xl text-blue-100 mb-4 animate-in fade-in-0 slide-in-from-top-6 duration-1000 delay-200 font-inter">
+          <p className="text-lg md:text-xl text-white/90 mb-4 font-inter drop-shadow-md">
             Skip design headaches. Ship standout posters in minutes.
           </p>
 
-          {/* Rotating benefit/pain-point messages (accessible and readable on gradient) */}
-          <div
-            className="h-8 md:h-9 relative overflow-hidden"
-            aria-live="polite"
-            aria-atomic="true"
-            aria-label="Rotating product benefits and pain-point solutions"
-          >
+          <div className="h-8 md:h-9 relative overflow-hidden">
             <span
               key={messageIndex}
-              className="absolute inset-0 flex items-center justify-center text-blue-100 font-inter text-sm md:text-base animate-rotate-fade"
+              className="absolute inset-0 flex items-center justify-center text-white/80 font-inter text-sm md:text-base animate-rotate-fade"
             >
               {rotatingMessages[messageIndex]}
             </span>
           </div>
 
           {/* Search Bar */}
-          <div className="max-w-md mx-auto mb-8 animate-in fade-in-0 slide-in-from-bottom-4 duration-1000 delay-300">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-300 w-5 h-5" />
-              <Input
-                type="text"
-                placeholder="Search templates... (e.g., 'business', 'colorful')"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label="Search templates"
-                className="glass pl-10 pr-4 py-3 text-white placeholder-blue-300 border-white/20 focus:border-purple-400 focus:neon-purple transition-all duration-300 font-inter"
-              />
+          <div className="max-w-md mx-auto mb-8">
+            <div className="relative group">
+              <div className="absolute -inset-0.5 bg-white/30 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
+              <div className="relative flex items-center bg-white/90 backdrop-blur-md rounded-xl border border-white/40 shadow-soft">
+                <Search className="absolute left-3 text-text-muted w-5 h-5" />
+                <Input
+                  type="text"
+                  placeholder="Search templates... (e.g., 'business', 'colorful')"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-6 border-none bg-transparent focus-visible:ring-0 text-text-primary placeholder:text-text-muted/70 w-full rounded-xl shadow-none hover:bg-transparent"
+                />
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Filters and Controls */}
-      <section className="relative z-10 px-4 md:px-6 py-4 section-fade-in scroll-fade-in">
+      <section className="relative z-10 px-4 md:px-6 py-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             {/* Category Filters */}
             <div className="relative w-full md:w-auto">
-              <div className="flex flex-wrap md:flex-nowrap gap-2 overflow-x-auto no-scrollbar py-2 px-1 rounded-xl bg-white/5 backdrop-blur-sm shadow-soft">
+              <div className="flex flex-wrap md:flex-nowrap gap-2 overflow-x-auto no-scrollbar py-2 px-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 shadow-soft">
                 {updatedCategories.map((category, index) => {
                   const Icon = category.icon
                   const isActive = selectedCategory === category.id
@@ -337,24 +304,17 @@ export default function TemplateGallery() {
                     <button
                       key={category.id}
                       onClick={() => setSelectedCategory(category.id)}
-                      className={`relative inline-flex items-center rounded-full px-3 py-1.5 text-sm transition-all duration-300 ease-in-out ${
+                      className={`relative inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium transition-all duration-300 ease-in-out border ${
                         isActive
-                          ? "text-white bg-[hsla(0,0%,100%,0.12)] shadow-soft"
-                          : "text-blue-200 hover:text-white hover:bg-[hsla(0,0%,100%,0.08)]"
+                          ? "bg-white text-primary border-white shadow-lg scale-105"
+                          : "bg-white/10 text-white border-white/10 hover:bg-white/20 hover:border-white/30"
                       }`}
-                      style={{ animationDelay: `${index * 100}ms` }}
                     >
-                      <Icon className="w-4 h-4 mr-2" />
+                      <Icon className={`w-4 h-4 mr-2 ${isActive ? "text-primary" : "text-white"}`} />
                       {category.name}
-                      <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        isActive ? "bg-emerald-500/90 text-white" : "bg-white/10 text-blue-200"
+                      <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                        isActive ? "bg-primary/10 text-primary" : "bg-white/20 text-white"
                       }`}>{category.count}</span>
-                      {/* Animated underline */}
-                      <span
-                        className={`absolute left-3 right-3 -bottom-0.5 h-[2px] rounded-full transition-all duration-300 ${
-                          isActive ? "bg-gradient-to-r from-[hsl(var(--accent-blue))] to-[hsl(var(--accent-green))] opacity-100" : "opacity-0"
-                        }`}
-                      />
                     </button>
                   )
                 })}
@@ -362,49 +322,44 @@ export default function TemplateGallery() {
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md p-1 rounded-xl border border-white/20 shadow-soft">
               <Button
                 size="icon"
                 onClick={() => setViewMode("grid")}
-                className={`glass btn-interactive transition-all duration-300 ${
-                  viewMode === "grid" ? "neon-purple" : "hover:neon-blue"
-                }`}
+                className={`w-9 h-9 rounded-lg transition-all duration-300 ${viewMode === "grid" ? "bg-white text-primary shadow-sm" : "bg-transparent text-white hover:bg-white/20"}`}
               >
                 <Grid3X3 className="w-5 h-5" />
               </Button>
               <Button
                 size="icon"
                 onClick={() => setViewMode("list")}
-                className={`glass btn-interactive transition-all duration-300 ${
-                  viewMode === "list" ? "neon-purple" : "hover:neon-blue"
-                }`}
+                className={`w-9 h-9 rounded-lg transition-all duration-300 ${viewMode === "list" ? "bg-white text-primary shadow-sm" : "bg-transparent text-white hover:bg-white/20"}`}
               >
                 <List className="w-5 h-5" />
               </Button>
             </div>
           </div>
-
-          {/* Results Count */}
-          <div className="mb-6">
-            <p className="text-blue-200 font-inter">
-              {filteredTemplates.length} template{filteredTemplates.length !== 1 ? "s" : ""} found
-              {searchTerm && ` for "${searchTerm}"`}
-              {selectedCategory !== "all" && ` in ${selectedCategory}`}
-            </p>
-          </div>
         </div>
       </section>
 
       {/* Templates Grid */}
-      <section className="relative z-10 px-4 md:px-6 pb-16 section-fade-in scroll-fade-in">
+      <section className="relative z-10 px-4 md:px-6 pb-24">
         <div className="max-w-7xl mx-auto">
+          <div className="mb-8 flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-white font-space drop-shadow-md">
+              {selectedCategory === 'all' ? 'Latest Templates' : `${selectedCategory} Templates`}
+            </h2>
+            <p className="text-white/90 font-inter text-sm bg-white/10 backdrop-blur-md px-3 py-1 rounded-full border border-white/20 shadow-soft">
+              {filteredTemplates.length} result{filteredTemplates.length !== 1 ? "s" : ""}
+            </p>
+          </div>
           {filteredTemplates.length === 0 ? (
-            <Card className="glass p-12 text-center animate-in fade-in-0 zoom-in-95 duration-1000">
+            <Card className="p-12 text-center animate-fadeUp">
               <div className="text-6xl mb-4">🤔</div>
-              <h3 className="text-2xl font-bold text-white mb-2 font-space">
+              <h3 className="text-2xl font-bold text-text-primary mb-2 font-space">
                 {templates.length === 0 ? "No Templates Available" : "Hakuna Template Hapa"}
               </h3>
-              <p className="text-blue-200 mb-4 font-inter">
+              <p className="text-text-secondary mb-4 font-inter">
                 {templates.length === 0
                   ? "No templates have been added yet. Check back later!"
                   : "Try a different search term or category. Ama check back later for more designs!"}
@@ -415,20 +370,20 @@ export default function TemplateGallery() {
                     setSearchTerm("")
                     setSelectedCategory("all")
                   }}
-                  className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 btn-interactive neon-purple"
+                  className="bg-primary hover:bg-primary-hover text-text-inverse"
                 >
                   Clear Filters
                 </Button>
                 <Button
                   onClick={refreshTemplates}
                   disabled={refreshing}
-                  className="glass btn-interactive text-white hover:neon-blue"
+                  className="bg-primary hover:bg-primary-hover text-text-inverse"
                 >
                   <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
                   Refresh
                 </Button>
                 {recentlyRefreshed && (
-                  <Badge variant="outline" className="ml-3 bg-white/10 text-white border-white/20">
+                  <Badge variant="outline" className="ml-3 bg-success-soft text-success-text border-border">
                     Updated
                   </Badge>
                 )}
@@ -443,7 +398,7 @@ export default function TemplateGallery() {
               {filteredTemplates.map((template, index) => (
                 <Card
                   key={template.template_id}
-                  className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl overflow-hidden transition-all duration-300 group cursor-pointer animate-in fade-in-0 slide-in-from-bottom-4 duration-1000 hover:scale-[1.02] hover:shadow-soft"
+                  className="overflow-hidden transition-all duration-300 group cursor-pointer hover:scale-[1.02]"
                   style={{ animationDelay: `${index * 0.1}s` }}
                 >
                   {/* Top Section: Thumbnail */}
@@ -451,7 +406,7 @@ export default function TemplateGallery() {
                     <img
                       src={getThumbnailUrl(template.thumbnail_path ?? undefined)}
                       alt={template.template_name}
-                      className="w-full h-auto object-contain rounded-t-xl border border-gray-200"
+                      className="w-full h-auto object-contain rounded-t-xl border border-border"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement
                         target.src = `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(template.template_name)}`
@@ -460,38 +415,38 @@ export default function TemplateGallery() {
 
                     {/* Template Tag Overlay */}
                     {template.tag && (
-                      <span className="absolute top-2 right-2 bg-[hsl(var(--accent-blue))] text-white text-xs px-2 py-1 rounded-full font-medium shadow-soft">
+                      <span className="absolute top-2 right-2 bg-accent text-text-inverse text-xs px-2 py-1 rounded-full font-medium shadow-md">
                         {template.tag}
                       </span>
                     )}
 
                     {/* Hover View Overlay */}
                     <div
-                      className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center cursor-pointer"
+                      className="absolute inset-0 bg-gradient-to-t from-primary/60 via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center cursor-pointer"
                       role="button"
                       aria-label={`View poster preview for ${template.template_name}`}
                       onClick={() => handlePreview(template)}
                     >
-                      <div className="px-4 py-2 rounded-full bg-white/80 text-neutral-800 text-sm font-medium shadow-soft">
+                      <div className="px-4 py-2 rounded-full bg-app-elevated text-text-primary text-sm font-medium shadow-md">
                         View Poster
                       </div>
                     </div>
                   </div>
 
                   {/* Bottom Section: Info Panel */}
-                  <div className="p-3 bg-gradient-to-b from-blue-900/80 to-purple-900/80 space-y-2 rounded-b-xl">
+                  <div className="p-3 bg-app-elevated space-y-2 rounded-b-xl">
                     {/* Name and Price */}
                     <div className="flex justify-between items-center">
-                      <h3 className="font-semibold text-base text-white font-space line-clamp-1">
+                      <h3 className="font-semibold text-base text-text-primary font-space line-clamp-1">
                         {template.template_name}
                       </h3>
-                      <span className="px-2 py-1 bg-emerald-500 text-white text-xs font-medium rounded-full whitespace-nowrap shadow-soft">
+                      <span className="px-2 py-1 bg-success text-text-inverse text-xs font-medium rounded-full whitespace-nowrap shadow-md">
                         KSh {template.price}
                       </span>
                     </div>
 
                     {/* Fields Count */}
-                    <div className="text-sm text-blue-200 font-inter">
+                    <div className="text-sm text-text-secondary font-inter">
                       Fields: {template.fields_required?.length || 0}
                     </div>
 
@@ -499,12 +454,12 @@ export default function TemplateGallery() {
                     <div className="flex justify-between mt-2">
                       <Button
                         onClick={() => handlePreview(template)}
-                        className="px-3 py-1 rounded-xl text-sm bg-[hsl(var(--accent-blue))] hover:brightness-105 text-white shadow-soft"
+                        className="px-3 py-1 rounded-xl text-sm bg-accent hover:bg-accent-hover text-text-inverse shadow-sm"
                       >
                         Preview
                       </Button>
                       <Link href={`/create/${template.template_id}`}>
-                        <Button className="px-3 py-1 rounded-xl text-sm bg-purple-600 hover:bg-purple-700 text-white shadow-soft">
+                        <Button className="px-3 py-1 rounded-xl text-sm bg-primary hover:bg-primary-hover text-text-inverse shadow-sm">
                           Customize
                         </Button>
                       </Link>
@@ -519,14 +474,14 @@ export default function TemplateGallery() {
 
       {/* Preview Modal */}
       {previewTemplate && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in-0 duration-300">
-          <Card className="glass p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in-0 duration-300">
+          <Card className="p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scaleIn bg-surface/95 border-white/20 shadow-card">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-bold text-white font-space">{previewTemplate.template_name}</h3>
+              <h3 className="text-2xl font-bold text-text-primary font-space">{previewTemplate.template_name}</h3>
               <Button
                 size="icon"
                 onClick={() => setPreviewTemplate(null)}
-                className="glass btn-interactive text-white hover:neon-purple"
+                className="bg-white/10 hover:bg-white/20 text-text-primary"
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -538,7 +493,7 @@ export default function TemplateGallery() {
                 <img
                   src={getThumbnailUrl(previewTemplate.thumbnail_path || "")}
                   alt={previewTemplate.template_name}
-                  className="w-full h-auto rounded-lg border-2 border-purple-400/30"
+                  className="w-full h-auto rounded-lg border-2 border-white/20 shadow-soft"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement
                     target.src = `/placeholder.svg?height=400&width=600&text=${encodeURIComponent(previewTemplate.template_name)}`
@@ -549,17 +504,17 @@ export default function TemplateGallery() {
               {/* Template Details */}
               <div className="space-y-3">
                 <div>
-                  <h4 className="text-lg font-bold text-white font-space mb-2">Description</h4>
-                  <p className="text-blue-200 font-inter">{previewTemplate.description}</p>
+                  <h4 className="text-lg font-bold text-text-primary font-space mb-2">Description</h4>
+                  <p className="text-text-secondary font-inter">{previewTemplate.description}</p>
                 </div>
 
                 <div>
-                  <h4 className="text-lg font-bold text-white font-space mb-2">Required Fields</h4>
+                  <h4 className="text-lg font-bold text-text-primary font-space mb-2">Required Fields</h4>
                   <div className="flex flex-wrap gap-2">
                     {previewTemplate.fields_required?.map((field) => (
                       <span
                         key={field.name}
-                        className="px-3 py-1 text-sm bg-purple-500/20 text-purple-300 rounded-full font-inter border border-purple-400/30"
+                        className="px-3 py-1 text-sm bg-primary/10 text-primary rounded-full font-inter border border-primary/20"
                       >
                         {field.label} ({field.type})
                       </span>
@@ -569,7 +524,7 @@ export default function TemplateGallery() {
 
                 <div className="pt-4">
                   <Link href={`/create/${previewTemplate.template_id}`}>
-                    <Button className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 btn-interactive neon-purple py-3 text-lg font-space">
+                    <Button className="w-full bg-primary hover:bg-primary-hover text-white py-3 text-lg font-space shadow-glowOrange">
                       <Palette className="w-5 h-5 mr-2" />
                       Start Customizing
                     </Button>
@@ -580,6 +535,6 @@ export default function TemplateGallery() {
           </Card>
         </div>
       )}
-    </div>
+    </BackgroundWrapper>
   )
 }

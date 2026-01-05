@@ -45,7 +45,7 @@ export default function AdminSidebar() {
         <Button
           onClick={toggleMobileMenu}
           size="icon"
-          className="glass btn-interactive text-white hover:neon-purple transition-all duration-300"
+          className="bg-primary hover:bg-primary-hover text-text-inverse transition-all duration-300"
         >
           {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </Button>
@@ -53,24 +53,24 @@ export default function AdminSidebar() {
 
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={toggleMobileMenu} />
+        <div className="lg:hidden fixed inset-0 bg-primary/50 backdrop-blur-sm z-40" onClick={toggleMobileMenu} />
       )}
 
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-gradient-to-b from-slate-900/95 via-purple-900/95 to-slate-900/95 backdrop-blur-xl border-r border-white/10 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-app-elevated backdrop-blur-xl border-r border-border transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center space-x-3 p-6 border-b border-white/10">
-            <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-blue-400 rounded-xl flex items-center justify-center neon-purple">
-              <Sparkles className="w-6 h-6 text-white animate-pulse" />
+          <div className="flex items-center space-x-3 p-6 border-b border-border">
+            <div className="w-10 h-10 bg-primary-soft rounded-xl flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-text-inverse animate-pulse" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white font-space">PosterGen</h1>
-              <p className="text-xs text-blue-200 font-inter">Admin Panel</p>
+              <h1 className="text-xl font-bold text-text-primary font-space">PosterGen</h1>
+              <p className="text-xs text-text-secondary font-inter">Admin Panel</p>
             </div>
           </div>
 
@@ -84,10 +84,10 @@ export default function AdminSidebar() {
                 <Link key={item.name} href={item.href} onClick={() => setIsMobileMenuOpen(false)}>
                   <Button
                     variant="ghost"
-                    className={`w-full justify-start space-x-3 h-12 transition-smooth font-inter hover-subtle ${
+                    className={`w-full justify-start space-x-3 h-12 font-inter ${
                       isActive
-                        ? "bg-gradient-to-r from-purple-500/20 to-blue-500/20 text-white border border-purple-400/30 neon-purple"
-                        : "text-blue-200 hover:text-white hover:bg-white/10 hover:neon-blue"
+                        ? "bg-primary-soft text-text-inverse border border-primary"
+                        : "text-text-muted hover:text-text-primary hover:bg-app-elevated"
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -99,20 +99,20 @@ export default function AdminSidebar() {
           </nav>
 
           {/* User Section */}
-          <div className="p-4 border-t border-white/10">
+          <div className="p-4 border-t border-border">
             <div className="flex items-center space-x-3 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-r from-green-400 to-emerald-400 rounded-full flex items-center justify-center">
-                <span className="text-white font-bold text-sm">A</span>
+              <div className="w-10 h-10 bg-success rounded-full flex items-center justify-center">
+                <span className="text-text-inverse font-bold text-sm">A</span>
               </div>
               <div>
-                <p className="text-white font-space text-sm">Admin</p>
-                <p className="text-blue-200 font-inter text-xs">—</p>
+                <p className="text-text-primary font-space text-sm">Admin</p>
+                <p className="text-text-secondary font-inter text-xs">—</p>
               </div>
             </div>
 
             <Button
               variant="ghost"
-              className="w-full justify-start space-x-3 h-10 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-300 font-inter"
+              className="w-full justify-start space-x-3 h-10 text-danger hover:bg-danger/10 transition-all duration-300 font-inter"
               onClick={async () => {
                 try {
                   await fetch("/api/admin/logout", { method: "POST" })

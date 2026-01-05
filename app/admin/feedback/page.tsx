@@ -138,10 +138,10 @@ export default function FeedbackPage() {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      new: { color: "bg-blue-500/20 text-blue-400 border-blue-400/30", label: "New" },
-      reviewed: { color: "bg-green-500/20 text-green-400 border-green-400/30", label: "Reviewed" },
-      featured: { color: "bg-purple-500/20 text-purple-400 border-purple-400/30", label: "Featured" },
-      flagged: { color: "bg-red-500/20 text-red-400 border-red-400/30", label: "Flagged" },
+      new: { color: "bg-info/20 text-info border-info/30", label: "New" },
+      reviewed: { color: "bg-success-soft text-success border-success/30", label: "Reviewed" },
+      featured: { color: "bg-primary-soft text-primary border-primary/30", label: "Featured" },
+      flagged: { color: "bg-danger/20 text-danger border-danger/30", label: "Flagged" },
     }
 
     const config = statusConfig[status] || statusConfig.new
@@ -149,9 +149,9 @@ export default function FeedbackPage() {
   }
 
   const getRatingColor = (rating) => {
-    if (rating >= 4) return "text-green-400"
-    if (rating >= 3) return "text-yellow-400"
-    return "text-red-400"
+    if (rating >= 4) return "text-success"
+    if (rating >= 3) return "text-warning"
+    return "text-danger"
   }
 
   const avgRating =
@@ -161,32 +161,32 @@ export default function FeedbackPage() {
     <div className="space-y-6">
       {/* Header Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card className="glass p-4 text-center hover:neon-blue transition-all duration-300 hover:scale-105">
-          <div className="text-2xl font-bold text-white font-space">{feedback.length}</div>
-          <div className="text-sm text-blue-200 font-inter">Total Feedback</div>
+        <Card className="p-4 text-center transition-all duration-300 hover:scale-105">
+          <div className="text-2xl font-bold text-text-primary font-space">{feedback.length}</div>
+          <div className="text-sm text-text-secondary font-inter">Total Feedback</div>
         </Card>
-        <Card className="glass p-4 text-center hover:neon-green transition-all duration-300 hover:scale-105">
-          <div className="text-2xl font-bold text-white font-space">{avgRating}</div>
-          <div className="text-sm text-blue-200 font-inter">Avg Rating</div>
+        <Card className="p-4 text-center transition-all duration-300 hover:scale-105">
+          <div className="text-2xl font-bold text-text-primary font-space">{avgRating}</div>
+          <div className="text-sm text-text-secondary font-inter">Avg Rating</div>
         </Card>
-        <Card className="glass p-4 text-center hover:neon-purple transition-all duration-300 hover:scale-105">
-          <div className="text-2xl font-bold text-white font-space">{feedback.filter((f) => f.rating >= 4).length}</div>
-          <div className="text-sm text-blue-200 font-inter">4+ Stars</div>
+        <Card className="p-4 text-center transition-all duration-300 hover:scale-105">
+          <div className="text-2xl font-bold text-text-primary font-space">{feedback.filter((f) => f.rating >= 4).length}</div>
+          <div className="text-sm text-text-secondary font-inter">4+ Stars</div>
         </Card>
-        <Card className="glass p-4 text-center hover:neon-yellow transition-all duration-300 hover:scale-105">
-          <div className="text-2xl font-bold text-white font-space">
+        <Card className="p-4 text-center transition-all duration-300 hover:scale-105">
+          <div className="text-2xl font-bold text-text-primary font-space">
             {feedback.filter((f) => f.status === "new").length}
           </div>
-          <div className="text-sm text-blue-200 font-inter">Unreviewed</div>
+          <div className="text-sm text-text-secondary font-inter">Unreviewed</div>
         </Card>
-        <Card className="glass p-4 text-center hover:neon-green transition-all duration-300 hover:scale-105">
-          <div className="text-2xl font-bold text-white font-space">{feedback.filter((f) => f.helpful).length}</div>
-          <div className="text-sm text-blue-200 font-inter">Helpful</div>
+        <Card className="p-4 text-center transition-all duration-300 hover:scale-105">
+          <div className="text-2xl font-bold text-text-primary font-space">{feedback.filter((f) => f.helpful).length}</div>
+          <div className="text-sm text-text-secondary font-inter">Helpful</div>
         </Card>
       </div>
 
       {/* Filters */}
-      <Card className="glass p-6">
+      <Card className="p-6">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
           <div className="flex flex-wrap gap-2">
             {/* Rating Filter */}
@@ -196,10 +196,8 @@ export default function FeedbackPage() {
                   key={rating}
                   size="sm"
                   onClick={() => setRatingFilter(rating)}
-                  className={`glass btn-interactive transition-all duration-300 ${
-                    ratingFilter === rating
-                      ? "neon-purple bg-purple-500/30 text-white"
-                      : "text-blue-200 hover:text-white"
+                  className={`transition-all duration-300 ${
+                    ratingFilter === rating ? "bg-primary text-text-inverse" : "bg-app-elevated text-text-muted hover:text-text-primary"
                   }`}
                 >
                   {rating === "all" ? "All Ratings" : `${rating}★`}
@@ -214,8 +212,8 @@ export default function FeedbackPage() {
                   key={status}
                   size="sm"
                   onClick={() => setStatusFilter(status)}
-                  className={`glass btn-interactive transition-all duration-300 capitalize ${
-                    statusFilter === status ? "neon-blue bg-blue-500/30 text-white" : "text-blue-200 hover:text-white"
+                  className={`transition-all duration-300 capitalize ${
+                    statusFilter === status ? "bg-primary text-text-inverse" : "bg-app-elevated text-text-muted hover:text-text-primary"
                   }`}
                 >
                   <Filter className="w-4 h-4 mr-2" />
@@ -226,29 +224,29 @@ export default function FeedbackPage() {
           </div>
 
           <div className="relative w-full lg:w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-300 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-text-muted w-4 h-4" />
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search feedback..."
-              className="glass pl-10 text-white placeholder-blue-300 border-white/20 focus:border-purple-400 focus:neon-purple transition-all duration-300 font-inter"
+              className="pl-10 font-inter"
             />
           </div>
         </div>
       </Card>
 
       {/* Feedback List */}
-      <Card className="glass p-6">
+      <Card className="p-6">
         <div className="flex items-center space-x-3 mb-6">
-          <MessageSquare className="w-6 h-6 text-blue-400" />
-          <h2 className="text-2xl font-bold text-white font-space">User Feedback ({filteredFeedback.length})</h2>
+          <MessageSquare className="w-6 h-6 text-info" />
+          <h2 className="text-2xl font-bold text-text-primary font-space">User Feedback ({filteredFeedback.length})</h2>
         </div>
 
         <div className="space-y-4">
           {filteredFeedback.map((item, index) => (
             <div
               key={item.id}
-              className="glass p-6 rounded-lg hover:neon-purple transition-all duration-300 hover:scale-105 animate-in fade-in-0 slide-in-from-bottom-4 duration-1000"
+              className="p-6 rounded-lg transition-all duration-300 hover:scale-105 animate-fadeUp"
               style={{ animationDelay: `${index * 100}ms` }}
             >
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
@@ -257,9 +255,9 @@ export default function FeedbackPage() {
                   <img
                     src={item.posterPreview || "/placeholder.svg"}
                     alt={item.templateUsed}
-                    className="w-full h-20 object-cover rounded border-2 border-purple-400/30"
+                    className="w-full h-20 object-cover rounded border-2 border-primary/30"
                   />
-                  <p className="text-blue-200 font-inter text-xs mt-1 text-center">{item.templateUsed}</p>
+                  <p className="text-text-secondary font-inter text-xs mt-1 text-center">{item.templateUsed}</p>
                 </div>
 
                 {/* Feedback Content */}
@@ -271,7 +269,7 @@ export default function FeedbackPage() {
                         {[...Array(5)].map((_, i) => (
                           <Star
                             key={i}
-                            className={`w-4 h-4 ${i < item.rating ? "text-yellow-400 fill-current" : "text-gray-400"}`}
+                            className={`w-4 h-4 ${i < item.rating ? "text-rating fill-current" : "text-text-muted"}`}
                           />
                         ))}
                       </div>
@@ -280,10 +278,10 @@ export default function FeedbackPage() {
                     </div>
 
                     {/* Comment */}
-                    <blockquote className="text-white font-inter leading-relaxed">"{item.comment}"</blockquote>
+                    <blockquote className="text-text-primary font-inter leading-relaxed">"{item.comment}"</blockquote>
 
                     {/* Meta Info */}
-                    <div className="flex items-center space-x-4 text-sm text-blue-200">
+                    <div className="flex items-center space-x-4 text-sm text-text-secondary">
                       <div className="flex items-center space-x-1">
                         <Calendar className="w-4 h-4" />
                         <span>{formatDate(item.date)}</span>
@@ -296,9 +294,9 @@ export default function FeedbackPage() {
                       )}
                       <div className="flex items-center space-x-1">
                         {item.helpful ? (
-                          <ThumbsUp className="w-4 h-4 text-green-400" />
+                          <ThumbsUp className="w-4 h-4 text-success" />
                         ) : (
-                          <ThumbsDown className="w-4 h-4 text-red-400" />
+                          <ThumbsDown className="w-4 h-4 text-danger" />
                         )}
                         <span>{item.helpful ? "Helpful" : "Not Helpful"}</span>
                       </div>
@@ -314,14 +312,14 @@ export default function FeedbackPage() {
                         <Button
                           size="sm"
                           onClick={() => handleCall(item.phoneNumber)}
-                          className="glass btn-interactive text-white hover:neon-green"
+                          className="bg-primary hover:bg-primary-hover text-text-inverse"
                         >
                           <Phone className="w-4 h-4" />
                         </Button>
                         <Button
                           size="sm"
                           onClick={() => handleWhatsApp(item.phoneNumber)}
-                          className="glass btn-interactive text-white hover:neon-green"
+                          className="bg-primary hover:bg-primary-hover text-text-inverse"
                         >
                           <MessageCircle className="w-4 h-4" />
                         </Button>
@@ -330,37 +328,37 @@ export default function FeedbackPage() {
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button size="sm" className="glass btn-interactive text-white hover:neon-blue">
+                        <Button size="sm" className="bg-app-elevated hover:bg-primary-soft text-text-primary">
                           <MoreVertical className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent className="glass border-white/20 bg-slate-900/90 backdrop-blur-md">
+                      <DropdownMenuContent className="border border-border bg-app-elevated">
                         <DropdownMenuItem
                           onClick={() => handleStatusChange(item.id, "reviewed")}
-                          className="text-white hover:bg-white/10 cursor-pointer"
+                          className="text-text-primary hover:bg-app hover:text-text-primary cursor-pointer"
                         >
-                          <Eye className="w-4 h-4 mr-2 text-green-400" />
+                          <Eye className="w-4 h-4 mr-2 text-success" />
                           Mark as Reviewed
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleStatusChange(item.id, "featured")}
-                          className="text-white hover:bg-white/10 cursor-pointer"
+                          className="text-text-primary hover:bg-app hover:text-text-primary cursor-pointer"
                         >
-                          <Star className="w-4 h-4 mr-2 text-purple-400" />
+                          <Star className="w-4 h-4 mr-2 text-primary" />
                           Feature This
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleStatusChange(item.id, "flagged")}
-                          className="text-white hover:bg-white/10 cursor-pointer"
+                          className="text-text-primary hover:bg-app hover:text-text-primary cursor-pointer"
                         >
-                          <MessageSquare className="w-4 h-4 mr-2 text-yellow-400" />
+                          <MessageSquare className="w-4 h-4 mr-2 text-warning" />
                           Flag for Review
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleDelete(item.id)}
-                          className="text-white hover:bg-white/10 cursor-pointer"
+                          className="text-text-primary hover:bg-app hover:text-text-primary cursor-pointer"
                         >
-                          <Trash2 className="w-4 h-4 mr-2 text-red-400" />
+                          <Trash2 className="w-4 h-4 mr-2 text-danger" />
                           Delete Feedback
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -374,9 +372,9 @@ export default function FeedbackPage() {
 
         {filteredFeedback.length === 0 && (
           <div className="text-center py-12">
-            <MessageSquare className="w-12 h-12 text-blue-300 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-white font-space mb-2">No Feedback Found</h3>
-            <p className="text-blue-200 font-inter">
+            <MessageSquare className="w-12 h-12 text-info mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-text-primary font-space mb-2">No Feedback Found</h3>
+            <p className="text-text-secondary font-inter">
               {searchTerm ? `No feedback matches "${searchTerm}"` : "No user feedback available yet."}
             </p>
           </div>

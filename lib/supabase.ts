@@ -187,10 +187,10 @@ export const getThumbnailUrl = (thumbnailPath?: string | null): string => {
 export const showToast = (message: string, type: "success" | "error" = "error") => {
   // Create toast element
   const toastDiv = document.createElement("div")
-  toastDiv.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg animate-in slide-in-from-right-4 duration-500 max-w-md ${
+  toastDiv.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-md animate-in slide-in-from-right-4 duration-500 max-w-md ${
     type === "success"
-      ? "bg-green-500/90 text-white border border-green-400"
-      : "bg-red-500/90 text-white border border-red-400"
+      ? "bg-success text-text-inverse border border-border"
+      : "bg-danger text-text-inverse border border-border"
   }`
 
   // Truncate very long messages
@@ -200,7 +200,7 @@ export const showToast = (message: string, type: "success" | "error" = "error") 
     <div class="flex items-start space-x-2">
       <div class="text-lg flex-shrink-0">${type === "success" ? "✅" : "⚠️"}</div>
       <div class="font-inter text-sm leading-relaxed">${displayMessage}</div>
-      <button onclick="this.parentElement.parentElement.remove()" class="text-white hover:text-gray-200 ml-2 flex-shrink-0">✕</button>
+      <button onclick="this.parentElement.parentElement.remove()" class="text-text-inverse hover:text-text-muted ml-2 flex-shrink-0">✕</button>
     </div>
   `
 

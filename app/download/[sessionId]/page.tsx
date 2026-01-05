@@ -10,6 +10,8 @@ import { supabase, type PosterTemplate, getThumbnailUrl, showToast } from "@/lib
 import * as Dialog from "@radix-ui/react-dialog"
 import { isValidRating, isValidComment } from "@/lib/validation"
 
+import { BackgroundWrapper } from "@/components/ui/background-wrapper"
+
 export default function DownloadPage() {
   const params = useParams()
   const sessionId = params.sessionId as string
@@ -179,27 +181,27 @@ export default function DownloadPage() {
 
   if (!sessionData) {
     return (
-<div className="min-h-screen site-gradient-bg flex items-center justify-center section-fade-in transition-smooth">
-        <Card className="glass p-8 text-center">
+      <BackgroundWrapper className="flex items-center justify-center">
+        <Card className="p-8 text-center bg-surface/95 backdrop-blur-md border-white/20 shadow-card">
           <div className="text-4xl mb-4">🤔</div>
-          <h2 className="text-2xl font-bold text-white mb-2 font-space">Session Not Found</h2>
-          <p className="text-blue-200 mb-4 font-inter">Looks like your session expired. Let's start over.</p>
+          <h2 className="text-2xl font-bold text-text-primary mb-2 font-space">Session Not Found</h2>
+          <p className="text-text-secondary mb-4 font-inter">Looks like your session expired. Let's start over.</p>
           <Link href="/templates">
-            <Button className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple">
+            <Button className="bg-primary hover:bg-primary-hover text-white shadow-glowOrange">
               Back to Posters
             </Button>
           </Link>
         </Card>
-      </div>
+      </BackgroundWrapper>
     )
   }
 
   return (
-<div className="min-h-screen site-gradient-bg relative overflow-hidden section-fade-in scroll-fade-in transition-smooth">
+    <BackgroundWrapper>
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
       </div>
 
       {/* Navigation */}
@@ -209,16 +211,16 @@ export default function DownloadPage() {
             <Link href="/templates">
               <Button
                 size="icon"
-                className="glass btn-interactive text-white hover:neon-blue transition-all duration-300"
+                className="bg-primary hover:bg-primary-hover text-white transition-all duration-300 shadow-glowOrange"
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-blue-400 rounded-lg flex items-center justify-center neon-purple">
+              <div className="w-8 h-8 bg-primary/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
                 <Sparkles className="w-5 h-5 text-white animate-pulse" />
               </div>
-              <span className="text-white font-bold text-xl font-space">Your Poster</span>
+              <span className="text-white font-bold text-xl font-space drop-shadow-md">Your Poster</span>
             </div>
           </div>
         </div>
@@ -230,7 +232,7 @@ export default function DownloadPage() {
           <img
             src={renderPosterSrc(sessionData.posterBase64, sessionData.posterUrl)}
             alt="Generated Poster"
-            className="max-w-full max-h-full"
+            className="max-w-full max-h-[70vh] rounded-lg shadow-card border-2 border-white/20"
             onError={(e) => {
               const target = e.target as HTMLImageElement
               target.src = "/placeholder.svg?height=400&width=600"
@@ -240,19 +242,19 @@ export default function DownloadPage() {
         <div className="max-w-7xl mx-auto flex justify-center items-center mt-8">
           <Button
             onClick={downloadPoster}
-            className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple"
+            className="bg-success hover:bg-success-hover text-white px-8 py-6 text-xl font-bold shadow-md hover:scale-105 transition-transform"
           >
             Download Poster
           </Button>
         </div>
         {/* Suggested Posters Section */}
         <div className="max-w-7xl mx-auto mt-12">
-          <h2 className="text-center text-2xl md:text-3xl font-bold text-white font-space mb-6">Suggested Posters</h2>
+          <h2 className="text-center text-2xl md:text-3xl font-bold text-white font-space mb-6 drop-shadow-md">Suggested Posters</h2>
           {showSuggestions && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
               {suggestedTemplates.map((template) => (
-                <Card key={template.template_id} className="glass p-4">
-                  <div className="aspect-[3/4] w-full overflow-hidden rounded-md">
+                <Card key={template.template_id} className="p-4 bg-surface/90 backdrop-blur-md border-white/20 shadow-soft hover:shadow-card transition-all">
+                  <div className="aspect-[3/4] w-full overflow-hidden rounded-md border border-white/10">
                     <img
                       src={getThumbnailUrl(template.thumbnail_path)}
                       alt={template.template_name}
@@ -264,15 +266,15 @@ export default function DownloadPage() {
                     />
                   </div>
                   <div className="mt-3">
-                    <h3 className="text-base md:text-lg font-bold text-white font-space line-clamp-2">
+                    <h3 className="text-base md:text-lg font-bold text-text-primary font-space line-clamp-2">
                       {template.template_name}
                     </h3>
                     {template.description && (
-                      <p className="text-sm text-blue-200 font-inter mt-1 line-clamp-2">{template.description}</p>
+                      <p className="text-sm text-text-secondary font-inter mt-1 line-clamp-2">{template.description}</p>
                     )}
                     <div className="mt-3">
                       <Link href={`/templates/${template.template_id}`}>
-                        <Button className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple w-full">
+                        <Button className="bg-primary hover:bg-primary-hover text-white w-full shadow-glowOrange">
                           View Template
                         </Button>
                       </Link>
@@ -290,17 +292,17 @@ export default function DownloadPage() {
               rel="noopener noreferrer"
               className="inline-block"
             >
-              <Button className="glass text-white hover:neon-blue">Go back to Dashboard</Button>
+              <Button className="bg-white/10 hover:bg-white/20 text-white border border-white/30 backdrop-blur-md">Go back to Dashboard</Button>
             </a>
           </div>
         </div>
         {/* Feedback Modal */}
         <Dialog.Root open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
           <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 bg-black/60" />
-            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md rounded-xl glass p-6">
-              <Dialog.Title className="text-xl font-bold text-white font-space mb-2">Rate your poster</Dialog.Title>
-              <Dialog.Description className="text-blue-200 font-inter mb-4">
+            <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
+            <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md rounded-xl bg-surface p-6 shadow-card z-50 border border-white/20">
+              <Dialog.Title className="text-xl font-bold text-text-primary font-space mb-2">Rate your poster</Dialog.Title>
+              <Dialog.Description className="text-text-secondary font-inter mb-4">
                 Tell us how we did. Your feedback helps improve templates.
               </Dialog.Description>
 
@@ -309,7 +311,7 @@ export default function DownloadPage() {
                   <button
                     key={star}
                     onClick={() => handleStarClick(star)}
-                    className={`text-2xl ${rating >= star ? "text-yellow-500" : "text-gray-300"}`}
+                    className={`text-3xl ${rating >= star ? "text-yellow-400" : "text-gray-300"} transition-colors duration-200`}
                     aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
                   >
                     ★
@@ -322,17 +324,17 @@ export default function DownloadPage() {
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
                 placeholder="Optional comment"
-                className="w-full p-2 border border-white/20 rounded-lg bg-white/5 text-white font-inter"
+                className="w-full p-3 border border-border rounded-lg bg-white/50 text-text-primary font-inter mb-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
               />
 
-              <div className="mt-6 flex justify-end space-x-3">
+              <div className="mt-2 flex justify-end space-x-3">
                 <Dialog.Close asChild>
-                  <Button className="glass text-blue-200">Skip</Button>
+                  <Button variant="ghost" className="text-text-secondary hover:bg-black/5">Skip</Button>
                 </Dialog.Close>
                 <Button
                   onClick={submitFeedback}
                   disabled={submitting}
-                  className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple"
+                  className="bg-primary hover:bg-primary-hover text-white shadow-glowOrange"
                 >
                   {submitting ? "Submitting…" : "Submit"}
                 </Button>
@@ -342,6 +344,6 @@ export default function DownloadPage() {
         </Dialog.Root>
         {/* Suggestions moved above; removed old block */}
       </div>
-    </div>
+    </BackgroundWrapper>
   )
 }

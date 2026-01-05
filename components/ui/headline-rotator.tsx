@@ -46,7 +46,7 @@ export function HeadlineRotator({
   }
 
   return (
-    <h1 className={`font-bold text-white ${className}`.trim()}>
+    <h1 className={`font-bold ${className}`.trim()}>
       {/* SR-only announcement to keep screen readers informed without visual clutter */}
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {safePhrases[index]}

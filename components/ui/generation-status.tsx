@@ -231,14 +231,14 @@ export default function GenerationStatus({ isOpen, sessionId, templateId, onClos
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-b from-neutral-900 via-neutral-800 to-neutral-900"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-app"
     >
       {/* Pulsing blue-red glow backdrop */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-[hsl(var(--accent-blue))] to-[hsl(var(--action-red))] opacity-25 blur-3xl animate-pulse-glow" />
+        <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-primary to-accent opacity-25 blur-3xl animate-pulse-glow" />
       </div>
 
-      <div className="relative mx-4 w-full max-w-lg rounded-2xl glass-dark p-8 shadow-soft">
+      <div className="relative mx-4 w-full max-w-lg rounded-xl bg-app-elevated p-8 shadow-md">
         <div className="flex items-center justify-center">
           <RippleLoader color="#3b82f6" speed={rippleSpeed} />
         </div>
@@ -263,7 +263,7 @@ export default function GenerationStatus({ isOpen, sessionId, templateId, onClos
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.35 }}
-              className="mt-1 text-sm text-white/80"
+              className="mt-1 text-sm text-text-secondary"
             >
               {messages[messageIndex]}
             </motion.p>
@@ -271,7 +271,7 @@ export default function GenerationStatus({ isOpen, sessionId, templateId, onClos
         </div>
 
         <div className="mt-5">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-white/10" aria-valuenow={percent} role="progressbar">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-app-elevated" aria-valuenow={percent} role="progressbar">
             <motion.div
               className="h-full rounded-full"
               style={{
@@ -284,19 +284,18 @@ export default function GenerationStatus({ isOpen, sessionId, templateId, onClos
               transition={{ repeat: Infinity, repeatType: "reverse", duration: 2.4, ease: "linear" }}
             />
           </div>
-          <p className="mt-2 text-center text-xs text-white/70">
+          <p className="mt-2 text-center text-xs text-text-secondary">
             {showFallbackTime ? "Still crafting perfection… hang tight!" : `~${Math.max(1, Math.round(remaining))}s remaining`}
           </p>
         </div>
 
         {finalUrl && stage === PosterStatus.AWAITING_PAYMENT && (
           <div className="mt-4 text-center animate-in fade-in-0 duration-300">
-            <p className="text-base font-semibold text-white">Poster generated successfully!</p>
-            <p className="mt-1 text-sm text-white/80">Redirecting you to payment…</p>
+            <p className="text-base font-semibold text-text-primary">Poster generated successfully!</p>
+            <p className="mt-1 text-sm text-text-secondary">Redirecting you to payment…</p>
           </div>
         )}
       </div>
     </div>
   )
 }
-

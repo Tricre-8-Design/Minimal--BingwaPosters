@@ -261,13 +261,13 @@ export default function ProgressPage() {
 
   if (error) {
     return (
-<div className="min-h-screen site-gradient-bg flex items-center justify-center section-fade-in transition-smooth">
-        <Card className="glass p-8 text-center">
+<div className="min-h-screen bg-app flex items-center justify-center section-fade-in transition-smooth">
+        <Card className="p-8 text-center">
           <div className="text-4xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-bold text-white mb-2 font-space">Error</h2>
-          <p className="text-blue-200 mb-4 font-inter">{error}</p>
+          <h2 className="text-2xl font-bold text-text-primary mb-2 font-space">Error</h2>
+          <p className="text-text-secondary mb-4 font-inter">{error}</p>
           <Link href="/templates">
-            <Button className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple">
+            <Button className="bg-primary hover:bg-primary-hover text-text-inverse">
               Back to Templates
             </Button>
           </Link>
@@ -277,11 +277,11 @@ export default function ProgressPage() {
   }
 
   return (
-<div className="min-h-screen site-gradient-bg relative overflow-hidden section-fade-in scroll-fade-in transition-smooth">
+<div className="min-h-screen bg-app relative overflow-hidden section-fade-in scroll-fade-in transition-smooth">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-accent rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
       </div>
 
       {/* Navigation */}
@@ -291,23 +291,23 @@ export default function ProgressPage() {
             <Link href={`/create/${sessionData?.templateId}`}>
               <Button
                 size="icon"
-                className="glass btn-interactive text-white hover:neon-blue transition-all duration-300"
+                className="bg-primary hover:bg-primary-hover text-text-inverse transition-all duration-300"
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-blue-400 rounded-lg flex items-center justify-center mx-auto mb-4 neon-purple">
-                <Sparkles className="w-5 h-5 text-white animate-pulse" />
+              <div className="w-8 h-8 bg-primary-soft rounded-lg flex items-center justify-center mx-auto mb-4">
+                <Sparkles className="w-5 h-5 text-text-inverse animate-pulse" />
               </div>
-              <span className="text-white font-bold text-xl font-space">Poster Progress</span>
+              <span className="text-text-primary font-bold text-xl font-space">Poster Progress</span>
             </div>
           </div>
         </div>
       </nav>
 
       <main className="relative z-10 px-4 md:px-6 py-8 flex flex-col items-center justify-center min-h-[calc(100vh-120px)]">
-        <Card className="glass p-8 w-full max-w-2xl text-center">
+        <Card className="p-8 w-full max-w-2xl text-center">
           {isLoadingPoster || isVerifyingPayment || !sessionData ? (
             <div className="flex flex-col items-center justify-center h-96" aria-live="polite">
               {/* Ripple loader that speeds up during processing */}
@@ -321,7 +321,7 @@ export default function ProgressPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -12 }}
                   transition={{ duration: 0.35 }}
-                  className="mt-4 text-base text-white font-space"
+                  className="mt-4 text-base text-text-primary font-space"
                 >
                   {processTextMap[uiStage]}
                 </motion.p>
@@ -335,7 +335,7 @@ export default function ProgressPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.35 }}
-                  className="mt-1 text-sm text-blue-200 font-inter"
+                  className="mt-1 text-sm text-text-secondary font-inter"
                 >
                   {rotatingPhrases[phraseIndex]}
                 </motion.p>
@@ -343,7 +343,7 @@ export default function ProgressPage() {
 
               {/* Animated gradient progress bar and countdown */}
               <div className="mt-5 w-full max-w-md">
-                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10" role="progressbar">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-app-elevated" role="progressbar">
                   <motion.div
                     className="h-full rounded-full"
                     style={{
@@ -356,7 +356,7 @@ export default function ProgressPage() {
                     transition={{ repeat: Infinity, repeatType: "reverse", duration: 2.4, ease: "linear" }}
                   />
                 </div>
-                <p className="mt-2 text-center text-xs text-white/70">
+                <p className="mt-2 text-center text-xs text-text-secondary">
                   {Math.max(0, 60 - elapsed) > 0
                     ? `~${Math.max(1, Math.round(60 - elapsed))}s remaining`
                     : "Still crafting perfection… hang tight!"}
@@ -365,13 +365,13 @@ export default function ProgressPage() {
             </div>
           ) : posterUrl ? (
             <div className="space-y-6">
-              <div className="w-20 h-20 bg-gradient-to-r from-green-400 to-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 neon-green animate-pulse">
-                <CheckCircle className="w-10 h-10 text-white" />
+              <div className="w-20 h-20 bg-success rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <CheckCircle className="w-10 h-10 text-text-inverse" />
               </div>
-              <h2 className="text-3xl font-bold text-white mb-2 font-space">Poster Ready!</h2>
-              <p className="text-blue-200 font-inter">Your custom poster is ready for download.</p>
+              <h2 className="text-3xl font-bold text-text-primary mb-2 font-space">Poster Ready!</h2>
+              <p className="text-text-secondary font-inter">Your custom poster is ready for download.</p>
 
-              <div className="relative w-full max-w-md mx-auto aspect-[3/4] rounded-lg overflow-hidden shadow-lg border border-white/20">
+              <div className="relative w-full max-w-md mx-auto aspect-[3/4] rounded-lg overflow-hidden shadow-lg border border-border">
                 <Image
                   src={posterUrl || "/placeholder.svg"}
                   alt="Generated Poster"
@@ -383,7 +383,7 @@ export default function ProgressPage() {
 
               <Button
                 onClick={handlePay}
-                className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 btn-interactive neon-green py-4 text-lg font-semibold font-space"
+                className="w-full bg-success hover:bg-success-hover text-text-inverse py-4 text-lg font-semibold font-space"
               >
                 <Download className="w-5 h-5 mr-2" />
                 Pay KSh {sessionData?.price || "0"} & Download
@@ -391,15 +391,15 @@ export default function ProgressPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="w-20 h-20 bg-gradient-to-r from-red-400 to-pink-400 rounded-full flex items-center justify-center mx-auto neon-purple">
-                <XCircle className="w-10 h-10 text-white" />
+              <div className="w-20 h-20 bg-danger rounded-full flex items-center justify-center mx-auto">
+                <XCircle className="w-10 h-10 text-text-inverse" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2 font-space">Poster Generation Failed</h2>
-              <p className="text-blue-200 font-inter">
+              <h2 className="text-2xl font-bold text-text-primary mb-2 font-space">Poster Generation Failed</h2>
+              <p className="text-text-secondary font-inter">
                 We encountered an issue generating your poster. Please try again or contact support.
               </p>
               <Link href={`/create/${sessionData?.templateId}`}>
-                <Button className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 btn-interactive neon-purple py-3 font-space">
+                <Button className="w-full bg-primary hover:bg-primary-hover text-text-inverse py-3 font-space">
                   Try Again
                 </Button>
               </Link>

@@ -38,6 +38,9 @@ interface TopTemplate {
   revenue: number
 }
 
+import { BackgroundWrapper } from "@/components/ui/background-wrapper"
+import LoadingScreen from "@/components/loading-screen"
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("dashboard")
   const [stats, setStats] = useState<DashboardStats>({
@@ -235,57 +238,29 @@ export default function AdminPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white font-space">Poster Generator Admin Panel </h1>
-            <p className="text-blue-200 font-inter">Loading live data...</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="glass p-6 animate-pulse">
-              <div className="h-4 bg-white/20 rounded mb-2"></div>
-              <div className="h-8 bg-white/20 rounded"></div>
-            </Card>
-          ))}
-        </div>
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   return (
-<div className="min-h-screen site-gradient-bg relative overflow-hidden section-fade-in scroll-fade-in transition-smooth">
-      {/* Ultra-futuristic background */}
-      <div className="absolute inset-0 overflow-hidden">
-        {/* Animated grid */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(147,51,234,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(147,51,234,0.1)_1px,transparent_1px)] bg-[size:50px_50px] animate-pulse"></div>
-
-        {/* Floating orbs */}
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse delay-2000"></div>
-
-        {/* Scanning lines */}
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-500/5 to-transparent h-32 animate-pulse"></div>
-      </div>
-
+    <BackgroundWrapper className="min-h-screen">
       {/* Header */}
-      <header className="relative z-10 p-4 md:p-6 border-b border-white/10">
+      <header className="relative z-10 p-4 md:p-6 border-b border-white/10 bg-surface/10 backdrop-blur-md">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-purple-400 to-blue-400 rounded-xl flex items-center justify-center neon-purple animate-pulse">
+            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-sm">
               <BarChart3 className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white font-space">Bingwa Posters Admin Panel</h1>
-              <p className="text-blue-200 font-inter text-sm md:text-base">Real-time poster generation analytics</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-white font-space drop-shadow-md">Bingwa Admin</h1>
+              <p className="text-white/80 font-inter text-sm md:text-base">Real-time poster analytics</p>
             </div>
           </div>
-
           
+          <Link href="/">
+            <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">
+              Back to Home
+            </Button>
+          </Link>
         </div>
       </header>
 
@@ -294,10 +269,10 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {/* Tab Navigation */}
-            <TabsList className="sticky top-0 z-50 glass grid w-full grid-cols-4 gap-2 h-auto p-1 bg-slate-900/50 border border-white/10 rounded-xl mb-6">
+            <TabsList className="sticky top-0 z-50 grid w-full grid-cols-4 gap-2 h-auto p-1 bg-surface/90 backdrop-blur-md border border-white/20 rounded-xl mb-6 shadow-soft">
               <TabsTrigger
                 value="dashboard"
-                className="glass data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-blue-500/30 data-[state=active]:text-white data-[state=active]:neon-purple text-blue-200 hover:text-white transition-all duration-300 py-3 font-inter"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
               >
                 <BarChart3 className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Dashboard</span>
@@ -305,7 +280,7 @@ export default function AdminPage() {
 
               <TabsTrigger
                 value="templates"
-                className="glass data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-blue-500/30 data-[state=active]:text-white data-[state=active]:neon-purple text-blue-200 hover:text-white transition-all duration-300 py-3 font-inter"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
               >
                 <ImageIcon className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Templates</span>
@@ -313,7 +288,7 @@ export default function AdminPage() {
 
               <TabsTrigger
                 value="feedback"
-                className="glass data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-blue-500/30 data-[state=active]:text-white data-[state=active]:neon-purple text-blue-200 hover:text-white transition-all duration-300 py-3 font-inter"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
               >
                 <MessageCircle className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Feedback</span>
@@ -321,35 +296,34 @@ export default function AdminPage() {
 
               <TabsTrigger
                 value="transactions"
-                className="glass data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500/30 data-[state=active]:to-blue-500/30 data-[state=active]:text-white data-[state=active]:neon-purple text-blue-200 hover:text-white transition-all duration-300 py-3 font-inter"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
               >
                 <CreditCard className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Transactions</span>
               </TabsTrigger>
             </TabsList>
 
-            {/* Dashboard Tab */}
-            <TabsContent value="dashboard" className="animate-in fade-in-0 duration-300">
-              <DashboardContent stats={stats} recentActivity={recentActivity} topTemplates={topTemplates} />
-            </TabsContent>
+            {/* Content wrapped in cards with glass effect */}
+            <div className="bg-surface/95 backdrop-blur-md rounded-xl border border-white/20 shadow-card p-6 min-h-[500px]">
+              <TabsContent value="dashboard" className="animate-in fade-in-0 duration-300 mt-0">
+                <DashboardContent stats={stats} recentActivity={recentActivity} topTemplates={topTemplates} />
+              </TabsContent>
 
-            {/* Templates Tab */}
-            <TabsContent value="templates" className="animate-in fade-in-0 duration-300">
-              <TemplatesContent />
-            </TabsContent>
+              <TabsContent value="templates" className="animate-in fade-in-0 duration-300 mt-0">
+                <TemplatesContent />
+              </TabsContent>
 
-            {/* Feedback Tab */}
-            <TabsContent value="feedback" className="animate-in fade-in-0 duration-300">
-              <FeedbackContent />
-            </TabsContent>
+              <TabsContent value="feedback" className="animate-in fade-in-0 duration-300 mt-0">
+                <FeedbackContent />
+              </TabsContent>
 
-            {/* Transactions Tab */}
-            <TabsContent value="transactions" className="animate-in fade-in-0 duration-300">
-              <TransactionsContent />
-            </TabsContent>
+              <TabsContent value="transactions" className="animate-in fade-in-0 duration-300 mt-0">
+                <TransactionsContent />
+              </TabsContent>
+            </div>
           </Tabs>
         </div>
       </main>
-    </div>
+    </BackgroundWrapper>
   )
 }

@@ -13,6 +13,8 @@ import { useParams, useRouter } from "next/navigation"
 import { supabase, showToast } from "@/lib/supabase"
 import { logInfo, logError, safeRedact, startTimer, elapsedMs } from "@/lib/logger"
 
+import { BackgroundWrapper } from "@/components/ui/background-wrapper"
+
 export default function PaymentPage() {
   const params = useParams()
   const router = useRouter()
@@ -207,23 +209,23 @@ export default function PaymentPage() {
 
   if (!sessionData) {
     return (
-<div className="min-h-screen site-gradient-bg flex items-center justify-center section-fade-in transition-smooth">
-        <Card className="glass p-8 text-center">
+      <BackgroundWrapper className="flex items-center justify-center">
+        <Card className="p-8 text-center bg-surface/95 backdrop-blur-md border-white/20 shadow-card">
           <div className="text-4xl mb-4">🤔</div>
-          <h2 className="text-2xl font-bold text-white mb-2 font-space">Session Not Found</h2>
-          <p className="text-blue-200 mb-4 font-inter">Looks like your session expired. Please start over.</p>
+          <h2 className="text-2xl font-bold text-text-primary mb-2 font-space">Session Not Found</h2>
+          <p className="text-text-secondary mb-4 font-inter">Looks like your session expired. Please start over.</p>
           <Link href="/templates">
-            <Button className="bg-gradient-to-r from-purple-500 to-blue-500 btn-interactive neon-purple">
+            <Button className="bg-primary hover:bg-primary-hover text-white shadow-glowOrange">
               Back to Posters
             </Button>
           </Link>
         </Card>
-      </div>
+      </BackgroundWrapper>
     )
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-neutral-900">
+    <BackgroundWrapper>
       {/* Blurred poster background */}
       <div className="absolute inset-0 -z-10">
         <img
@@ -231,7 +233,7 @@ export default function PaymentPage() {
           alt="Poster background"
           className="w-full h-full object-cover blur-2xl opacity-25 scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-neutral-900/60 via-neutral-900/80 to-neutral-900/90" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/20 via-primary/25 to-primary/30" />
       </div>
 
       {/* Navigation */}
@@ -241,16 +243,16 @@ export default function PaymentPage() {
             <Link href={`/create/${sessionData?.templateId}`}>
               <Button
                 size="icon"
-                className="glass btn-interactive text-white hover:neon-blue transition-all duration-300"
+                className="bg-primary hover:bg-primary-hover text-white transition-all duration-300 shadow-glowOrange"
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-emerald-400 rounded-lg flex items-center justify-center mx-auto mb-4 neon-green">
+              <div className="w-8 h-8 bg-success rounded-lg flex items-center justify-center mx-auto mb-4 shadow-md">
                 <Sparkles className="w-5 h-5 text-white animate-pulse" />
               </div>
-              <span className="text-white font-bold text-xl font-space">Payment</span>
+              <span className="text-white font-bold text-xl font-space drop-shadow-md">Payment</span>
             </div>
           </div>
         </div>
@@ -259,36 +261,36 @@ export default function PaymentPage() {
       <div className="relative z-10 px-4 md:px-6 py-8">
         <div className="max-w-2xl mx-auto">
           {paymentStatus === "pending" && (
-            <Card className="glass-dark p-8 animate-in fade-in-0 zoom-in-95 duration-700 shadow-soft">
+            <Card className="p-8 animate-scaleIn shadow-card bg-surface/95 backdrop-blur-md border-white/20">
               {/* Poster preview with lock overlay */}
-              <div className="relative mx-auto mb-8 w-full max-w-sm aspect-[3/4] overflow-hidden rounded-xl ring-1 ring-white/10 shadow-soft">
+              <div className="relative mx-auto mb-8 w-full max-w-sm aspect-[3/4] overflow-hidden rounded-xl border border-white/30 shadow-soft">
                 <img
                   src={sessionData?.posterUrl || "/placeholder.svg"}
                   alt="Poster preview"
                   className="absolute inset-0 h-full w-full object-cover"
                 />
-                <div className="absolute inset-0 bg-black/45 backdrop-blur-sm flex items-center justify-center">
-                  <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-white shadow-soft">
+                <div className="absolute inset-0 bg-primary/45 backdrop-blur-sm flex items-center justify-center">
+                  <div className="flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-text-primary shadow-md">
                     <Lock className="w-5 h-5" />
                     <span className="font-space text-sm">Locked — pay to unlock</span>
                   </div>
                 </div>
-                <div className="absolute top-3 right-3 rounded-full bg-white/80 px-3 py-1 text-sm font-semibold text-neutral-900 shadow-soft">
+                <div className="absolute top-3 right-3 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-text-primary shadow-md">
                   KSh {sessionData.price}
                 </div>
               </div>
 
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-gradient-to-r from-green-400 to-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 neon-green">
+                <div className="w-16 h-16 bg-success rounded-full flex items-center justify-center mx-auto mb-4 shadow-md">
                   <Smartphone className="w-8 h-8 text-white" />
                 </div>
-                <h2 className="text-3xl font-bold text-white mb-1 font-space">Almost Done!</h2>
-                <p className="text-blue-200 font-inter">Pay KSh {sessionData.price} to download your poster</p>
+                <h2 className="text-3xl font-bold text-text-primary mb-1 font-space">Almost Done!</h2>
+                <p className="text-text-secondary font-inter">Pay KSh {sessionData.price} to download your poster</p>
               </div>
 
               <div className="space-y-6">
                 <div>
-                  <Label htmlFor="mpesa" className="text-white font-medium font-space flex items-center mb-2">
+                  <Label htmlFor="mpesa" className="text-text-primary font-medium font-space flex items-center mb-2">
                     <CreditCard className="w-4 h-4 mr-2" />
                     M-PESA Number
                   </Label>
@@ -298,9 +300,9 @@ export default function PaymentPage() {
                     value={mpesaNumber}
                     onChange={handlePhoneChange}
                     placeholder="07XX XXX XXX"
-                    className="glass text-white placeholder-blue-300 border-white/20 focus:border-green-400 focus:neon-green transition-all duration-300 font-inter text-lg py-3"
+                    className="text-lg py-6 bg-white/50 focus:bg-white border-white/30"
                   />
-                  <p className="text-sm text-blue-300 mt-1 font-inter">
+                  <p className="text-sm text-text-muted mt-1 font-inter">
                     Enter your Safaricom number to receive STK push
                   </p>
                 </div>
@@ -308,14 +310,14 @@ export default function PaymentPage() {
                 <Button
                   onClick={processPayment}
                   disabled={!validatePhoneNumber(mpesaNumber)}
-                  className="relative w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 btn-interactive neon-green py-4 text-lg font-semibold font-space disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98]"
+                  className="relative w-full bg-success hover:bg-success-hover text-white py-4 text-lg font-semibold font-space disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] shadow-md"
                 >
-                  <span className="absolute -inset-0.5 rounded-xl bg-gradient-to-r from-[hsl(var(--accent-blue))] to-[hsl(var(--accent-green))] opacity-20 blur-sm" />
+                  <span className="absolute -inset-0.5 rounded-xl bg-white/20 opacity-40 blur-sm" />
                   <Zap className="relative w-5 h-5 mr-2" />
                   Pay Now
                 </Button>
 
-                <div className="text-center text-sm text-blue-300 font-inter">
+                <div className="text-center text-sm text-text-muted font-inter bg-white/50 py-2 rounded-lg">
                   <p>Secure payment powered by Mpesa | PesaFlux | Tricre8</p>
                   <p>Your poster will be available immediately after payment</p>
                 </div>
@@ -324,20 +326,20 @@ export default function PaymentPage() {
           )}
 
           {paymentStatus === "processing" && (
-            <Card className="glass-dark p-8 text-center animate-in fade-in-0 zoom-in-95 duration-700 shadow-soft">
+            <Card className="p-8 text-center animate-scaleIn shadow-card bg-surface/95 backdrop-blur-md border-white/20">
               <div className="space-y-6">
                 <div className="relative">
-                  <div className="w-20 h-20 border-4 border-green-400 border-t-transparent rounded-full animate-spin mx-auto shadow-soft"></div>
-                  <div className="absolute inset-0 w-20 h-20 border-4 border-emerald-400 border-b-transparent rounded-full animate-spin animate-reverse mx-auto"></div>
+                  <div className="w-20 h-20 border-4 border-success border-t-transparent rounded-full animate-spin mx-auto shadow-md"></div>
+                  <div className="absolute inset-0 w-20 h-20 border-4 border-success border-b-transparent rounded-full animate-spin animate-reverse mx-auto"></div>
                 </div>
 
                 <div>
-                  <h2 className="text-2xl font-bold text-white mb-2 font-space">STK Push Sent!</h2>
-                  <p className="text-blue-200 font-inter">Check your phone and enter your M-PESA PIN</p>
+                  <h2 className="text-2xl font-bold text-text-primary mb-2 font-space">STK Push Sent!</h2>
+                  <p className="text-text-secondary font-inter">Check your phone and enter your M-PESA PIN</p>
                 </div>
 
                 {countdown > 0 && (
-                  <div className="flex items-center justify-center space-x-2 text-yellow-400">
+                  <div className="flex items-center justify-center space-x-2 text-warning">
                     <Clock className="w-5 h-5" />
                     <span className="font-mono text-lg">{countdown}s</span>
                   </div>
@@ -348,23 +350,23 @@ export default function PaymentPage() {
                     {[...Array(3)].map((_, i) => (
                       <div
                         key={i}
-                        className="w-2 h-2 bg-green-400 rounded-full animate-bounce"
+                        className="w-2 h-2 bg-success rounded-full animate-bounce"
                         style={{ animationDelay: `${i * 0.2}s` }}
                       ></div>
                     ))}
                   </div>
-                  <p className="text-sm text-blue-300 font-inter">Waiting for M-PESA confirmation...</p>
+                  <p className="text-sm text-text-muted font-inter">Waiting for M-PESA confirmation...</p>
                 </div>
               </div>
             </Card>
           )}
 
           {paymentStatus === "success" && (
-            <Card className="glass-dark p-8 text-center animate-in fade-in-0 zoom-in-95 duration-700 shadow-soft">
+            <Card className="p-8 text-center animate-scaleIn shadow-card bg-surface/95 backdrop-blur-md border-white/20">
               <div className="space-y-6">
                 {/* Success Animation */}
                 <div className="relative">
-                  <div className="w-20 h-20 bg-gradient-to-r from-green-400 to-emerald-400 rounded-full flex items-center justify-center mx-auto neon-green animate-pulse">
+                  <div className="w-20 h-20 bg-success rounded-full flex items-center justify-center mx-auto animate-pulse shadow-lg">
                     <CheckCircle className="w-10 h-10 text-white" />
                   </div>
                   {/* Confetti effect */}
@@ -372,7 +374,7 @@ export default function PaymentPage() {
                     {[...Array(12)].map((_, i) => (
                       <div
                         key={i}
-                        className="absolute w-2 h-2 bg-gradient-to-r from-yellow-400 to-pink-400 rounded-full animate-bounce"
+                        className="absolute w-2 h-2 bg-warning rounded-full animate-bounce"
                         style={{
                           left: `${20 + i * 5}%`,
                           top: `${10 + (i % 3) * 20}%`,
@@ -386,13 +388,13 @@ export default function PaymentPage() {
 
                 <div>
                   <div className="text-4xl mb-2">🔥</div>
-                  <h2 className="text-3xl font-bold text-white mb-2 font-space">You saved 3 hours of designing the poster!</h2>
-                  <p className="text-green-400 text-xl font-semibold font-space">Poster yako iko ready sasa.</p>
-                  <p className="text-blue-200 font-inter">Payment successful - KSh {sessionData.price}</p>
+                  <h2 className="text-3xl font-bold text-text-primary mb-2 font-space">You saved 3 hours of designing the poster!</h2>
+                  <p className="text-success text-xl font-semibold font-space">Poster yako iko ready sasa.</p>
+                  <p className="text-text-secondary font-inter">Payment successful - KSh {sessionData.price}</p>
                 </div>
 
                 <Link href={`/download/${sessionId}`}>
-                  <Button className="w-full bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 btn-interactive neon-green py-4 text-lg font-semibold font-space">
+                  <Button className="w-full bg-success hover:bg-success-hover text-white py-4 text-lg font-semibold font-space shadow-md">
                     <CheckCircle className="w-5 h-5 mr-2" />
                     Download Your Poster
                   </Button>
@@ -402,16 +404,16 @@ export default function PaymentPage() {
           )}
 
           {paymentStatus === "failed" && (
-            <Card className="glass-dark p-8 text-center animate-in fade-in-0 zoom-in-95 duration-700 shadow-soft">
+            <Card className="p-8 text-center animate-scaleIn shadow-card bg-surface/95 backdrop-blur-md border-white/20">
               <div className="space-y-6">
-                <div className="w-20 h-20 bg-gradient-to-r from-red-400 to-pink-400 rounded-full flex items-center justify-center mx-auto neon-purple">
+                <div className="w-20 h-20 bg-danger rounded-full flex items-center justify-center mx-auto shadow-md">
                   <XCircle className="w-10 h-10 text-white" />
                 </div>
 
                 <div>
                   <div className="text-4xl mb-2">⏱️</div>
-                  <h2 className="text-2xl font-bold text-white mb-2 font-space">Haijacheza bado?</h2>
-                  <p className="text-blue-200 font-inter">
+                  <h2 className="text-2xl font-bold text-text-primary mb-2 font-space">Haijacheza bado?</h2>
+                  <p className="text-text-secondary font-inter">
                     Payment didn't go through. Try again ama confirm your M-PESA balance or your network.
                   </p>
                 </div>
@@ -419,14 +421,14 @@ export default function PaymentPage() {
                 <div className="space-y-3">
                   <Button
                     onClick={retryPayment}
-                    className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 btn-interactive neon-purple py-3 font-space"
+                    className="w-full bg-primary hover:bg-primary-hover text-white py-3 font-space shadow-glowOrange"
                   >
                     Try Again
                   </Button>
 
                   <Button
                     variant="outline"
-                    className="w-full glass text-white border-white/20 hover:bg-white/10 btn-interactive bg-transparent"
+                    className="w-full border border-white/30 bg-white/50 text-text-primary hover:bg-white/80"
                   >
                     Contact Support
                   </Button>
@@ -436,6 +438,6 @@ export default function PaymentPage() {
           )}
         </div>
       </div>
-    </div>
+    </BackgroundWrapper>
   )
 }
