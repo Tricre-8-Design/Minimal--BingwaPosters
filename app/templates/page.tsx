@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -32,6 +33,13 @@ import { BackgroundWrapper } from "@/components/ui/background-wrapper"
 import LoadingScreen from "@/components/loading-screen"
 
 export default function TemplateGallery() {
+  const router = useRouter()
+
+  // Redirect to home page
+  useEffect(() => {
+    router.push("/")
+  }, [router])
+
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [viewMode, setViewMode] = useState("grid")
@@ -304,17 +312,15 @@ export default function TemplateGallery() {
                     <button
                       key={category.id}
                       onClick={() => setSelectedCategory(category.id)}
-                      className={`relative inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium transition-all duration-300 ease-in-out border ${
-                        isActive
+                      className={`relative inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium transition-all duration-300 ease-in-out border ${isActive
                           ? "bg-white text-primary border-white shadow-lg scale-105"
                           : "bg-white/10 text-white border-white/10 hover:bg-white/20 hover:border-white/30"
-                      }`}
+                        }`}
                     >
                       <Icon className={`w-4 h-4 mr-2 ${isActive ? "text-primary" : "text-white"}`} />
                       {category.name}
-                      <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                        isActive ? "bg-primary/10 text-primary" : "bg-white/20 text-white"
-                      }`}>{category.count}</span>
+                      <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${isActive ? "bg-primary/10 text-primary" : "bg-white/20 text-white"
+                        }`}>{category.count}</span>
                     </button>
                   )
                 })}
@@ -391,9 +397,8 @@ export default function TemplateGallery() {
             </Card>
           ) : (
             <div
-              className={`grid gap-6 ${
-                viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-1"
-              }`}
+              className={`grid gap-6 ${viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-1"
+                }`}
             >
               {filteredTemplates.map((template, index) => (
                 <Card

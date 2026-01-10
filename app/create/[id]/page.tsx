@@ -29,27 +29,29 @@ import { PosterStatus, type PosterStatusType } from "@/lib/status"
 import { motion, AnimatePresence } from "framer-motion"
 import dynamic from "next/dynamic"
 import { logInfo, logError, safeRedact, startTimer, elapsedMs } from "@/lib/logger"
+import { extractFieldsFromBlueprint, type ExtractedField } from "@/lib/ai-blueprint-parser"
+import MaintenanceAlert from "@/components/ui/maintenance-alert"
 
 // Dynamically import GenerationStatus with SSR disabled to prevent server-side vendor-chunk resolution
 // Use a stable relative path to avoid alias resolution issues during chunking in dev/prod.
 const GenerationStatus = dynamic(
   () => import(/* webpackChunkName: "ui-generation-status" */ "../../../components/ui/generation-status").then((m) => m.default),
   {
-  ssr: false,
-  loading: () => (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-    >
-      <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg ring-1 ring-black/10">
-        <div className="flex items-center justify-center">
-          <div aria-label="Loading" className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+    ssr: false,
+    loading: () => (
+      <div
+        role="status"
+        aria-live="polite"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      >
+        <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-lg ring-1 ring-black/10">
+          <div className="flex items-center justify-center">
+            <div aria-label="Loading" className="h-16 w-16 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+          </div>
+          <p className="mt-4 text-center text-base font-medium text-gray-900">Preparing generation UI…</p>
         </div>
-        <p className="mt-4 text-center text-base font-medium text-gray-900">Preparing generation UI…</p>
       </div>
-    </div>
-  ),
+    ),
   },
 )
 
@@ -73,6 +75,17 @@ export default function CreatePoster() {
   const [posterStatus, setPosterStatus] = useState<PosterStatusType | null>(null)
   const [loadingMessage, setLoadingMessage] = useState("")
   const [sessionId, setSessionId] = useState("")
+  const [extractedFields, setExtractedFields] = useState<ExtractedField[]>([]) // For AI templates
+
+  // Maintenance status
+  const [maintenanceStatus, setMaintenanceStatus] = useState<{
+    placid: { isUnderMaintenance: boolean; message: string }
+    ai: { isUnderMaintenance: boolean; message: string }
+  }>({
+    placid: { isUnderMaintenance: false, message: "" },
+    ai: { isUnderMaintenance: false, message: "" },
+  })
+
 
   // Auto text contrast helper: returns 'text-white' or 'text-neutral-900' based on background brightness
   const getTextColorClassForBg = (hex?: string) => {
@@ -93,11 +106,19 @@ export default function CreatePoster() {
 
   const loadingMessages = [
     "Design smarter, not harder.",
-    "You'll never wait for a designer again.",
+    "Hang tight… your poster is manifesting ✨",
     "Polish your hustle shoes… your poster is almost ready!",
     "Mixing your colors...",
     "Sharpening the edges… applying digital makeup 😎",
   ]
+
+  const aiLoadingMessages = [
+    "✨ Rendering instantly...",
+    "🎨 AI is painting your masterpiece...",
+    "⚡ Creating magic in real-time...",
+    "🚀 Almost there...",
+  ]
+
 
   useEffect(() => {
     // Generate session ID
@@ -108,7 +129,30 @@ export default function CreatePoster() {
 
     // Fetch template from Supabase
     fetchTemplate()
+
+    // Check maintenance status
+    checkMaintenanceStatus()
+
+    // Re-check maintenance every 30 seconds
+    const maintenanceInterval = setInterval(checkMaintenanceStatus, 30000)
+
+    return () => clearInterval(maintenanceInterval)
   }, [templateId])
+
+  const checkMaintenanceStatus = async () => {
+    try {
+      // Add timestamp to prevent caching
+      const response = await fetch(`/api/maintenance-status?t=${Date.now()}`)
+      const data = await response.json()
+
+      if (data.success && data.maintenance) {
+        setMaintenanceStatus(data.maintenance)
+      }
+    } catch (error) {
+      console.error("Error checking maintenance status:", error)
+      // On error, assume no maintenance to avoid blocking users
+    }
+  }
 
   const testConnections = async () => {
 
@@ -157,20 +201,44 @@ export default function CreatePoster() {
       // Template fetched successfully
       setTemplate(data)
 
-      // Validate template structure
-      if (!data.template_uuid) {
+      // Validate template structure based on engine type
+      const isAI = data.engine_type === "ai"
+      if (!isAI && !data.template_uuid) {
         showToast("Template configuration issue: missing UUID", "error")
-      }
-
-      if (!data.fields_required || !Array.isArray(data.fields_required)) {
-        showToast("Template configuration issue: invalid fields", "error")
       }
 
       // Initialize form data with empty values
       const initialFormData: Record<string, any> = {}
-      data.fields_required?.forEach((field) => {
-        initialFormData[field.name] = field.type === "image" ? null : ""
-      })
+
+      if (isAI && data.ai_prompt) {
+        // AI Template: Extract fields from blueprint
+        try {
+          // Handle both string and object formats
+          const parsed = typeof data.ai_prompt === "string"
+            ? JSON.parse(data.ai_prompt)
+            : data.ai_prompt
+          const fields = extractFieldsFromBlueprint(parsed)
+          setExtractedFields(fields)
+
+          // Initialize form with default values
+          fields.forEach((field) => {
+            initialFormData[field.field_key] = field.default_value || ""
+          })
+        } catch (err: any) {
+          console.error("Blueprint parsing error:", err)
+          showToast("Failed to parse AI blueprint", "error")
+          setExtractedFields([])
+        }
+      } else {
+        // Placid Template: Use fields_required
+        if (!data.fields_required || !Array.isArray(data.fields_required)) {
+          showToast("Template configuration issue: invalid fields", "error")
+        }
+        data.fields_required?.forEach((field) => {
+          initialFormData[field.name] = field.type === "image" ? null : ""
+        })
+      }
+
       setFormData(initialFormData)
     } catch (err: any) {
       const errorMessage = err.message || "Failed to load template. Please try again."
@@ -228,23 +296,40 @@ export default function CreatePoster() {
     }
 
     // Validate required fields
-    const missingFields =
-      template.fields_required?.filter(
+    const isAI = template.engine_type === "ai"
+    const missingFields = isAI
+      ? extractedFields.filter(
+        (field) => field.required && (!formData[field.field_key] || formData[field.field_key] === ""),
+      )
+      : template.fields_required?.filter(
         (field) => field.required && (!formData[field.name] || formData[field.name] === ""),
       ) || []
 
     if (missingFields.length > 0) {
-      showToast(`Please fill in required fields: ${missingFields.map((f) => f.label).join(", ")}`, "error")
+      const fieldLabels = isAI
+        ? missingFields.map((f) => f.label).join(", ")
+        : missingFields.map((f: any) => f.label).join(", ")
+      showToast(`Please fill in required fields: ${fieldLabels}`, "error")
       return
     }
+
+    // Check if engine is under maintenance
+    const engineStatus = isAI ? maintenanceStatus.ai : maintenanceStatus.placid
+    if (engineStatus.isUnderMaintenance) {
+      showToast(engineStatus.message || "This poster generation engine is currently under maintenance", "error")
+      return
+    }
+
+
 
     setIsGenerating(true)
     let messageIndex = 0
 
-    // Cycle through loading messages
+    // Cycle through loading messages (AI-specific or Placid)
+    const messages = isAI ? aiLoadingMessages : loadingMessages
     const messageInterval = setInterval(() => {
-      setLoadingMessage(loadingMessages[messageIndex])
-      messageIndex = (messageIndex + 1) % loadingMessages.length
+      setLoadingMessage(messages[messageIndex])
+      messageIndex = (messageIndex + 1) % messages.length
     }, 1500)
 
     try {
@@ -256,8 +341,11 @@ export default function CreatePoster() {
         input_data: safeRedact(formData),
       })
 
+      // Use the correct endpoint based on template engine type
+      const apiEndpoint = isAI ? "/api/generate-ai" : "/api/generate"
+
       const result = await fetchJsonFriendly<{ success: boolean; image_url?: string | null; session_id?: string }>(
-        "/api/generate",
+        apiEndpoint,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -268,12 +356,12 @@ export default function CreatePoster() {
             session_id: sessionId,
           }),
         },
-        { retryCount: 1, userMessage: "Couldn’t generate your poster right now — we’re trying again." },
+        { retryCount: 1, userMessage: "Couldn't generate your poster right now — we're trying again." },
       )
 
       if (!result.ok) {
         logError("ui/create", new Error(result.message || "generate_failed"), { session_id: sessionId })
-        throw new Error(result.message || "Failed to generate poster via Placid")
+        throw new Error(result.message || `Failed to generate poster via ${isAI ? "AI" : "Placid"}`)
       }
 
       const body = result.data || {}
@@ -288,7 +376,7 @@ export default function CreatePoster() {
       }
     } catch (err: any) {
       logError("ui/create", err, { session_id: sessionId })
-      showToast("We couldn’t generate your poster right now.", "error")
+      showToast("We couldn't generate your poster right now.", "error")
       setError("Failed to generate poster. Please try again.")
     } finally {
       clearInterval(messageInterval)
@@ -467,106 +555,224 @@ export default function CreatePoster() {
       <div className="relative z-10 px-4 md:px-6 pb-16">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8">
           {/* Form Section */}
-          <Card className="p-8 animate-fadeUp bg-[#AA67E6
-] bg-gradient-to-t from-[#AA67E6] to-[##1ABD6EFF] backdrop-blur-md border-green/80 shadow-card">
+          <Card
+            className={`p-8 animate-fadeUp backdrop-blur-md shadow-card ${template.engine_type === "ai"
+              ? "bg-gradient-to-br from-purple-50 via-pink-50 to-purple-100 border-purple-300 shadow-[0_0_40px_rgba(168,85,247,0.3)]"
+              : "bg-[#AA67E6] bg-gradient-to-t from-[#AA67E6] to-[#1ABD6EFF] border-green/80"
+              }`}
+          >
             <div className="mb-6">
-              <h3 className="text-2xl font-bold text-text-primary mb-2 font-space">{template.template_name}</h3>
-              <p className="text-text-secondary font-inter">{template.description}</p>
+              <div className="flex items-center gap-2 mb-2">
+                {template.engine_type === "ai" && (
+                  <motion.div
+                    animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+                  >
+                    <Sparkles className="w-6 h-6 text-purple-600" />
+                  </motion.div>
+                )}
+                <h3 className={`text-2xl font-bold font-space ${template.engine_type === "ai" ? "text-purple-900" : "text-text-primary"
+                  }`}>
+                  {template.template_name}
+                </h3>
+              </div>
+              <p className={`font-inter ${template.engine_type === "ai" ? "text-purple-700" : "text-text-secondary"
+                }`}>
+                {template.description}
+              </p>
               <div className="mt-2 flex items-center space-x-4">
-                <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full font-inter border border-primary/20">
+                <span className={`px-2 py-1 text-xs rounded-full font-inter border ${template.engine_type === "ai"
+                  ? "bg-purple-100 text-purple-700 border-purple-300"
+                  : "bg-primary/10 text-primary border-primary/20"
+                  }`}>
                   {template.category}
                 </span>
+                {template.engine_type === "ai" && (
+                  <motion.span
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    className="px-3 py-1 text-xs bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-full font-semibold shadow-lg"
+                  >
+                    ⚡ Instant AI
+                  </motion.span>
+                )}
               </div>
             </div>
 
-            <form className="space-y-6">
+            {/* Maintenance Alert */}
+            {((template.engine_type === "ai" && maintenanceStatus.ai.isUnderMaintenance) ||
+              (template.engine_type !== "ai" && maintenanceStatus.placid.isUnderMaintenance)) && (
+                <div className="mb-6">
+                  <MaintenanceAlert
+                    engine={template.engine_type === "ai" ? "ai" : "placid"}
+                    message={
+                      template.engine_type === "ai"
+                        ? maintenanceStatus.ai.message
+                        : maintenanceStatus.placid.message
+                    }
+                  />
+                  <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-blue-900 font-medium mb-2">Looking for alternatives?</p>
+                    <p className="text-blue-700 text-sm mb-3">
+                      {template.engine_type === "ai"
+                        ? maintenanceStatus.placid.isUnderMaintenance
+                          ? "Both engines are currently under maintenance. Please check back later."
+                          : "Try our Placid templates which are currently available."
+                        : maintenanceStatus.ai.isUnderMaintenance
+                          ? "Both engines are currently under maintenance. Please check back later."
+                          : "Try our AI-powered templates which are currently available."}
+                    </p>
+                    {!((template.engine_type === "ai" && maintenanceStatus.placid.isUnderMaintenance) ||
+                      (template.engine_type !== "ai" && maintenanceStatus.ai.isUnderMaintenance)) && (
+                        <Link href="/templates">
+                          <Button variant="outline" className="w-full bg-white hover:bg-blue-50 border-blue-300 text-blue-900">
+                            Browse Available Templates
+                          </Button>
+                        </Link>
+                      )}
+                  </div>
+                </div>
+              )}
+
+            <form className="space-y-6" style={{
+              opacity: ((template.engine_type === "ai" && maintenanceStatus.ai.isUnderMaintenance) ||
+                (template.engine_type !== "ai" && maintenanceStatus.placid.isUnderMaintenance)) ? 0.5 : 1,
+              pointerEvents: ((template.engine_type === "ai" && maintenanceStatus.ai.isUnderMaintenance) ||
+                (template.engine_type !== "ai" && maintenanceStatus.placid.isUnderMaintenance)) ? 'none' : 'auto'
+            }}>
               {" "}
               {/* Removed onSubmit={handleSubmit} */}
-              {template.fields_required?.map((field, index) => (
-                <div
-                  key={field.name}
-                  className="space-y-2 animate-fadeUp"
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                >
-                  <Label
-                    htmlFor={field.name}
-                    className="font-medium font-space flex items-center text-text-primary"
+
+              {/* AI Templates: Use Extracted Fields */}
+              {template.engine_type === "ai" && extractedFields.length > 0 ? (
+                extractedFields.map((field, index) => (
+                  <div
+                    key={field.field_key}
+                    className="space-y-2 animate-fadeUp"
+                    style={{ animationDelay: `${index * 0.1}s` }}
                   >
-                    {field.type === "image" && <ImageIcon className="w-4 h-4 mr-2" />}
-                    {field.type === "text" && <Type className="w-4 h-4 mr-2" />}
-                    {field.type === "textarea" && <Palette className="w-4 h-4 mr-2" />}
-                    {field.label}
-                    {field.required && <span className="text-danger ml-1">*</span>}
-                  </Label>
+                    <Label
+                      htmlFor={field.field_key}
+                      className="font-medium font-space flex items-center text-text-primary"
+                    >
+                      <Type className="w-4 h-4 mr-2" />
+                      {field.label}
+                      {field.required && <span className="text-danger ml-1">*</span>}
+                    </Label>
 
-                  {field.type === "image" ? (
-                    <div className="space-y-3">
-                      <div className="border-2 border-dashed border-primary/20 rounded-lg p-6 text-center hover:border-primary transition-all duration-300 group bg-white/50">
-                        <input
-                          type="file"
-                          id={field.name}
-                          accept="image/*"
-                          onChange={(e) => handleImageUpload(field.name, e)}
-                          className="hidden"
-                        />
-                        <label
-                          htmlFor={field.name}
-                          className="cursor-pointer flex flex-col items-center space-y-2 group-hover:scale-105 transition-transform duration-300"
-                        >
-                          <Upload className="w-8 h-8 text-primary/60 group-hover:text-primary" />
-                          <span className="text-text-secondary font-inter">Click to upload or drag & drop</span>
-                          <span className="text-sm text-text-muted font-inter">PNG, JPG up to 5MB</span>
-                        </label>
-                      </div>
-
-                      {formData[field.name] && (
-                        <div className="relative">
-                          <img
-                            src={formData[field.name] || "/placeholder.svg"}
-                            alt="Upload preview"
-                            className="w-20 h-20 object-cover rounded-lg border-2 border-primary shadow-sm"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ) : field.type === "textarea" ? (
-                    <Textarea
-                      id={field.name}
-                      value={formData[field.name] || ""}
-                      onChange={(e) => handleInputChange(field.name, e.target.value)}
-                      required={field.required}
-                      placeholder={`Enter your ${field.label.toLowerCase()}...`}
-                      className="resize-none bg-white/50 focus:bg-white border-white/30"
-                      rows={3}
-                    />
-                  ) : (
                     <Input
                       type="text"
-                      id={field.name}
-                      value={formData[field.name] || ""}
-                      onChange={(e) => handleInputChange(field.name, e.target.value)}
+                      id={field.field_key}
+                      value={formData[field.field_key] || ""}
+                      onChange={(e) => handleInputChange(field.field_key, e.target.value)}
                       required={field.required}
-                      placeholder={`Enter your ${field.label.toLowerCase()}...`}
+                      placeholder={field.placeholder}
                       className="bg-white/50 focus:bg-white border-white/30"
                     />
-                  )}
-                </div>
-              ))}
+                  </div>
+                ))
+              ) : (
+                /* Placid Templates: Use fields_required */
+                template.fields_required?.map((field, index) => (
+                  <div
+                    key={field.name}
+                    className="space-y-2 animate-fadeUp"
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    <Label
+                      htmlFor={field.name}
+                      className="font-medium font-space flex items-center text-text-primary"
+                    >
+                      {field.type === "image" && <ImageIcon className="w-4 h-4 mr-2" />}
+                      {field.type === "text" && <Type className="w-4 h-4 mr-2" />}
+                      {field.type === "textarea" && <Palette className="w-4 h-4 mr-2" />}
+                      {field.label}
+                      {field.required && <span className="text-danger ml-1">*</span>}
+                    </Label>
+
+                    {field.type === "image" ? (
+                      <div className="space-y-3">
+                        <div className="border-2 border-dashed border-primary/20 rounded-lg p-6 text-center hover:border-primary transition-all duration-300 group bg-white/50">
+                          <input
+                            type="file"
+                            id={field.name}
+                            accept="image/*"
+                            onChange={(e) => handleImageUpload(field.name, e)}
+                            className="hidden"
+                          />
+                          <label
+                            htmlFor={field.name}
+                            className="cursor-pointer flex flex-col items-center space-y-2 group-hover:scale-105 transition-transform duration-300"
+                          >
+                            <Upload className="w-8 h-8 text-primary/60 group-hover:text-primary" />
+                            <span className="text-text-secondary font-inter">Click to upload or drag & drop</span>
+                            <span className="text-sm text-text-muted font-inter">PNG, JPG up to 5MB</span>
+                          </label>
+                        </div>
+
+                        {formData[field.name] && (
+                          <div className="relative">
+                            <img
+                              src={formData[field.name] || "/placeholder.svg"}
+                              alt="Upload preview"
+                              className="w-20 h-20 object-cover rounded-lg border-2 border-primary shadow-sm"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : field.type === "textarea" ? (
+                      <Textarea
+                        id={field.name}
+                        value={formData[field.name] || ""}
+                        onChange={(e) => handleInputChange(field.name, e.target.value)}
+                        required={field.required}
+                        placeholder={`Enter your ${field.label.toLowerCase()}...`}
+                        className="resize-none bg-white/50 focus:bg-white border-white/30"
+                        rows={3}
+                      />
+                    ) : (
+                      <Input
+                        type="text"
+                        id={field.name}
+                        value={formData[field.name] || ""}
+                        onChange={(e) => handleInputChange(field.name, e.target.value)}
+                        required={field.required}
+                        placeholder={`Enter your ${field.label.toLowerCase()}...`}
+                        className="bg-white/50 focus:bg-white border-white/30"
+                      />
+                    )}
+                  </div>
+                ))
+              )}
+
               <Button
                 onClick={handleGenerateClick} // Wired to new handler
                 disabled={isGenerating}
-                className={`relative w-full bg-primary hover:bg-primary-hover text-white py-4 text-lg font-semibold font-space shadow-glowOrange ${isGenerating ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                className={`relative w-full ${template.engine_type === "ai"
+                  ? "bg-gradient-to-r from-purple-600 via-pink-600 to-purple-700 hover:from-purple-700 hover:via-pink-700 hover:to-purple-800 shadow-[0_0_30px_rgba(168,85,247,0.4)]"
+                  : "bg-primary hover:bg-primary-hover shadow-glowOrange"
+                  } text-white py-4 text-lg font-semibold font-space ${isGenerating ? "ring-2 ring-offset-2" : ""} ${template.engine_type === "ai" ? "ring-purple-400" : "ring-primary"
+                  }`}
               >
                 {isGenerating ? (
                   <>
                     <span className="absolute -inset-0.5 rounded-xl bg-white/20 opacity-40 blur-sm" />
                     <Loader2 className="relative w-5 h-5 mr-2 animate-spin" />
-                    Creating Magic...
+                    {template.engine_type === "ai" ? "Creating..." : "Creating Magic..."}
                   </>
                 ) : (
                   <>
-                    <Zap className="w-5 h-5 mr-2" />
-                    Let's Start the Magic
+                    {template.engine_type === "ai" ? (
+                      <>
+                        <Sparkles className="w-5 h-5 mr-2 animate-pulse" />
+                        Create Poster
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-5 h-5 mr-2" />
+                        Let's Start the Magic
+                      </>
+                    )}
                   </>
                 )}
               </Button>
@@ -574,13 +780,36 @@ export default function CreatePoster() {
           </Card>
 
           {/* Preview Section */}
-          <Card className="p-8 animate-scaleIn delay-300 bg-surface/95 backdrop-blur-md border-white/20 shadow-card">
+          <Card className={`p-8 animate-scaleIn delay-300 backdrop-blur-md shadow-card ${template.engine_type === "ai"
+            ? "bg-gradient-to-br from-purple-50 via-pink-50 to-purple-100 border-purple-300 shadow-[0_0_40px_rgba(168,85,247,0.3)]"
+            : "bg-surface/95 border-white/20"
+            }`}>
             <div className="mb-6">
-              <h3 className="text-2xl font-bold text-text-primary mb-2 font-space flex items-center">
-                <Eye className="w-6 h-6 mr-2" />
-                Poster Preview
+              <h3 className={`text-2xl font-bold mb-2 font-space flex items-center ${template.engine_type === "ai" ? "text-purple-900" : "text-text-primary"
+                }`}>
+                {template.engine_type === "ai" ? (
+                  <>
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <Sparkles className="w-6 h-6 mr-2 text-purple-600" />
+                    </motion.div>
+                    AI Reference
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-6 h-6 mr-2" />
+                    Poster Preview
+                  </>
+                )}
               </h3>
-              <p className="text-text-secondary font-inter">Your poster will look exactly like this.</p>
+              <p className={`font-inter ${template.engine_type === "ai" ? "text-purple-700" : "text-text-secondary"
+                }`}>
+                {template.engine_type === "ai"
+                  ? "Your custom poster will be generated from this design template."
+                  : "Your poster will look exactly like this."}
+              </p>
             </div>
 
             <div className="relative">
@@ -599,40 +828,21 @@ export default function CreatePoster() {
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
-                          transition={{ duration: 0.4 }}
-                          className="absolute inset-0 bg-black/40 backdrop-blur-[8px] flex items-center justify-center"
+                          className="absolute inset-0 backdrop-blur-2xl bg-white/10 flex flex-col items-center justify-center p-6 space-y-4"
                         >
-                          <div className="text-center px-6">
-                            {/* Tiny confetti animation in background */}
-                            <div className="absolute inset-0 pointer-events-none">
-                              {[...Array(20)].map((_, i) => (
-                                <motion.span
-                                  key={i}
-                                  className="absolute w-2 h-2 rounded-full"
-                                  style={{
-                                    top: `${Math.random() * 100}%`,
-                                    left: `${Math.random() * 100}%`,
-                                    backgroundColor: ["#22c55e", "#0ea5e9", "#7c3aed", "#f59e0b"][i % 4],
-                                  }}
-                                  initial={{ opacity: 0, y: -10 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  transition={{ duration: 0.8, delay: i * 0.02 }}
-                                />
-                              ))}
-                            </div>
-                            <p className="relative z-10 text-white font-space text-lg mb-2 drop-shadow-md">
-                              Poster generated successfully! Proceed to payment.
-                            </p>
-                            <p className="relative z-10 text-white/90 font-inter text-sm mb-4 drop-shadow-md">
-                              Pay KSh {template?.price} to unlock your poster.
-                            </p>
-                            <Link href={`/payment/${sessionId}`} className="relative z-10">
-                              <Button className="w-full bg-primary hover:bg-primary-hover text-white py-3 font-space shadow-glowOrange">
-                                <Download className="w-5 h-5 mr-2" />
-                                Pay KSh {template?.price} to unlock
-                              </Button>
-                            </Link>
-                          </div>
+                          <div className="text-6xl mb-4">🔒</div>
+                          <h4 className="text-2xl font-bold text-white font-space text-center drop-shadow-lg">
+                            Payment Required
+                          </h4>
+                          <p className="text-white/90 text-center font-inter drop-shadow">
+                            Complete payment to unlock your high-quality poster download
+                          </p>
+                          <Link href={`/payment/${sessionId}`}>
+                            <Button className="bg-primary hover:bg-primary-hover text-white py-3 px-8 text-lg font-space shadow-glowOrange">
+                              <Download className="w-5 h-5 mr-2" />
+                              Pay KSh {template?.price} to unlock
+                            </Button>
+                          </Link>
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -671,8 +881,32 @@ export default function CreatePoster() {
                   )}
                 </div>
               ) : (
-                <div className="aspect-[4/3] bg-white/50 rounded-lg flex items-center justify-center border-2 border-dashed border-primary/20 overflow-hidden">
-                  {template.thumbnail_path ? (
+                <div className={`aspect-[4/3] rounded-lg flex items-center justify-center border-2 border-dashed overflow-hidden ${template.engine_type === "ai"
+                  ? "bg-gradient-to-br from-purple-100 to-pink-100 border-purple-400"
+                  : "bg-white/50 border-primary/20"
+                  }`}>
+                  {template.engine_type === "ai" && template.poster_reference ? (
+                    <div className="relative w-full h-full">
+                      <img
+                        src={getThumbnailUrl(template.poster_reference)}
+                        alt="AI Poster Reference"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.src = "/placeholder.svg"
+                        }}
+                      />
+                      <div className="absolute top-4 right-4">
+                        <motion.div
+                          animate={{ scale: [1, 1.05, 1] }}
+                          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                          className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg"
+                        >
+                          ✨ AI Reference Design
+                        </motion.div>
+                      </div>
+                    </div>
+                  ) : template.thumbnail_path ? (
                     <img
                       src={getThumbnailUrl(template.thumbnail_path)}
                       alt={template.template_name}
@@ -683,10 +917,13 @@ export default function CreatePoster() {
                       }}
                     />
                   ) : (
-                    <div className="text-center space-y-2">
-                      <ImageIcon className="w-12 h-12 text-primary/40 mx-auto" />
-                      <p className="text-text-secondary font-inter">Your poster will look exactly like this!</p>
-                      <p className="text-sm text-text-muted font-inter">Fill the form to see the magic</p>
+                    <div className="text-center p-8">
+                      <Eye className={`w-16 h-16 mx-auto mb-4 ${template.engine_type === "ai" ? "text-purple-400" : "text-primary/40"
+                        }`} />
+                      <p className={`font-inter ${template.engine_type === "ai" ? "text-purple-600" : "text-text-muted"
+                        }`}>
+                        Fill in the form to see your poster preview
+                      </p>
                     </div>
                   )}
                 </div>

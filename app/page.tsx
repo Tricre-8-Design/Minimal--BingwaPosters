@@ -43,6 +43,16 @@ export default function HomePage() {
   const [previewTemplate, setPreviewTemplate] = useState<PosterTemplate | null>(null)
   const [updatedNotice, setUpdatedNotice] = useState(false)
   const [recentlyRefreshed, setRecentlyRefreshed] = useState(false)
+  const [activeTab, setActiveTab] = useState<"classic" | "instant">("classic")
+
+  // Maintenance status
+  const [maintenanceStatus, setMaintenanceStatus] = useState<{
+    placid: { isUnderMaintenance: boolean; message: string }
+    ai: { isUnderMaintenance: boolean; message: string }
+  }>({
+    placid: { isUnderMaintenance: false, message: "" },
+    ai: { isUnderMaintenance: false, message: "" },
+  })
 
   const categories = [
     { id: "all", name: "All Templates", icon: Grid3X3, count: 0 },
@@ -53,11 +63,18 @@ export default function HomePage() {
     { id: "Others", name: "Others", icon: Home, count: 0 },
   ]
 
+  // Debug: Log when maintenance status changes
+  useEffect(() => {
+    console.log("Maintenance status updated:", maintenanceStatus)
+    console.log("Classic under maintenance:", maintenanceStatus.placid.isUnderMaintenance)
+    console.log("AI under maintenance:", maintenanceStatus.ai.isUnderMaintenance)
+  }, [maintenanceStatus])
+
   // Fetch templates from Supabase
   useEffect(() => {
     // Ensure loading screen shows for at least 3 seconds
     const minLoadTime = new Promise((resolve) => setTimeout(resolve, 3000))
-    
+
     // Wrap fetch in a promise handling both data and minimum time
     const loadData = async () => {
       setLoading(true)
@@ -69,6 +86,12 @@ export default function HomePage() {
     }
 
     loadData()
+
+    // Check maintenance status
+    checkMaintenanceStatus()
+
+    // Re-check maintenance every 30 seconds
+    const maintenanceInterval = setInterval(checkMaintenanceStatus, 30000)
 
     // Set up real-time subscription for template changes
     const subscription = supabase
@@ -109,8 +132,27 @@ export default function HomePage() {
 
     return () => {
       subscription.unsubscribe()
+      clearInterval(maintenanceInterval)
     }
   }, [])
+
+  const checkMaintenanceStatus = async () => {
+    try {
+      // Add timestamp to prevent caching
+      const response = await fetch(`/api/maintenance-status?t=${Date.now()}`)
+      const data = await response.json()
+
+      console.log("Maintenance status fetched:", data)
+
+      if (data.success && data.maintenance) {
+        console.log("Setting maintenance status:", data.maintenance)
+        setMaintenanceStatus(data.maintenance)
+      }
+    } catch (error) {
+      console.error("Error checking maintenance status:", error)
+      // On error, assume no maintenance to avoid blocking users
+    }
+  }
 
   const fetchTemplates = async (showLoader = true) => {
     try {
@@ -151,7 +193,7 @@ export default function HomePage() {
     setTimeout(() => setRecentlyRefreshed(false), 3000)
   }
 
-  // Filter templates based on search and category
+  // Filter templates based on search, category, and active tab
   const filteredTemplates = templates.filter((template) => {
     const term = searchTerm.toLowerCase()
     const matchesSearch =
@@ -161,14 +203,26 @@ export default function HomePage() {
 
     const matchesCategory = selectedCategory === "all" || template.category === selectedCategory
 
-    return matchesSearch && matchesCategory
+    // Filter by engine type based on active tab
+    const matchesTab = activeTab === "classic"
+      ? (template.engine_type === "placid" || !template.engine_type)
+      : template.engine_type === "ai"
+
+    return matchesSearch && matchesCategory && matchesTab
   })
 
-  // Update category counts
-  const updatedCategories = categories.map((cat) => ({
-    ...cat,
-    count: cat.id === "all" ? templates.length : templates.filter((t) => t.category === cat.id).length,
-  }))
+  // Update category counts based on active tab
+  const updatedCategories = categories.map((cat) => {
+    const tabTemplates = templates.filter((t) =>
+      activeTab === "classic"
+        ? (t.engine_type === "placid" || !t.engine_type)
+        : t.engine_type === "ai"
+    )
+    return {
+      ...cat,
+      count: cat.id === "all" ? tabTemplates.length : tabTemplates.filter((t) => t.category === cat.id).length,
+    }
+  })
 
   const toggleFavorite = (templateId: string) => {
     setFavorites((prev) => {
@@ -281,6 +335,67 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Tab Switcher */}
+      <section className="relative z-10 px-4 md:px-6 py-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-center gap-4 p-1 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 max-w-2xl mx-auto shadow-soft">
+            {/* Classic Posters Tab */}
+            <button
+              onClick={() => setActiveTab("classic")}
+              className={`flex-1 relative px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 ${activeTab === "classic"
+                ? "bg-white text-primary shadow-lg scale-105"
+                : "bg-transparent text-white/80 hover:bg-white/10"
+                }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Sparkles className="w-5 h-5" />
+                <span>Classic Posters</span>
+              </div>
+              {activeTab === "classic" && (
+                <div className="text-xs text-text-secondary mt-1 font-normal">
+                  Most accurate, detailed posters. Best for complex offers. <br /> <span className="text-success font-bold">Recommended</span>
+                </div>
+              )}
+            </button>
+
+            {/* Instant Posters Tab */}
+            <button
+              onClick={() => setActiveTab("instant")}
+              className={`flex-1 relative px-6 py-4 rounded-xl font-bold text-lg transition-all duration-300 ${activeTab === "instant"
+                ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/50 scale-105"
+                : "bg-transparent text-white/80 hover:bg-white/10"
+                }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Zap className="w-5 h-5" />
+                <span>Instant Posters</span>
+                <span className="absolute -top-2 -right-2 bg-yellow-400 text-black text-[10px] font-black px-2 py-0.5 rounded-full shadow-md animate-pulse">
+                  BETA
+                </span>
+              </div>
+              {activeTab === "instant" && (
+                <div className="text-xs mt-1 font-normal">
+                  Fast, clean, best for simple offers.
+                </div>
+              )}
+            </button>
+          </div>
+
+          {/* Instant Posters Intro Text */}
+          {activeTab === "instant" && (
+            <div className="mt-6 max-w-3xl mx-auto text-center space-y-2 animate-in fade-in-0 slide-in-from-top-2 duration-500">
+              <p className="text-white/90 font-medium text-lg">
+                ✨ Instant Posters – Pick a design. Enter details. Done in seconds.
+              </p>
+              <p className="text-yellow-300 text-sm font-semibold flex items-center justify-center gap-2">
+                <span className="inline-block w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></span>
+                This is a Beta version - AI can make mistakes
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Filters and Controls */}
       <section className="relative z-10 px-4 md:px-6 py-6 border-y border-white/10 bg-white/5 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto">
@@ -295,18 +410,16 @@ export default function HomePage() {
                     <button
                       key={category.id}
                       onClick={() => setSelectedCategory(category.id)}
-                      className={`relative inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium transition-all duration-300 ease-in-out border ${
-                        isActive
-                          ? "bg-white text-primary border-white shadow-lg scale-105"
-                          : "bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40 backdrop-blur-sm"
-                      }`}
+                      className={`relative inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium transition-all duration-300 ease-in-out border ${isActive
+                        ? "bg-white text-primary border-white shadow-lg scale-105"
+                        : "bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40 backdrop-blur-sm"
+                        }`}
                       style={{ animationDelay: `${index * 100}ms` }}
                     >
                       <Icon className={`w-4 h-4 mr-2 ${isActive ? "text-primary" : "text-white"}`} />
                       {category.name}
-                      <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                        isActive ? "bg-primary/10 text-primary" : "bg-white/20 text-white"
-                      }`}>{category.count}</span>
+                      <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${isActive ? "bg-primary/10 text-primary" : "bg-white/20 text-white"
+                        }`}>{category.count}</span>
                     </button>
                   )
                 })}
@@ -345,6 +458,164 @@ export default function HomePage() {
               {filteredTemplates.length} result{filteredTemplates.length !== 1 ? "s" : ""}
             </p>
           </div>
+
+          {/* Classic Posters Maintenance Modal */}
+          {activeTab === "classic" && maintenanceStatus.placid.isUnderMaintenance && (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in-0 duration-300">
+              <Card className="p-8 max-w-2xl w-full bg-orange-50/95 border-2 border-orange-500/50 shadow-2xl">
+                <div className="text-center space-y-6">
+                  {/* Icon */}
+                  <div className="flex justify-center">
+                    <div className="p-4 bg-orange-500/20 rounded-full">
+                      <svg className="w-16 h-16 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div>
+                    <h2 className="text-3xl font-bold text-orange-900 mb-2 font-space">
+                      {activeTab === "classic" ? "Our Poster Studio" : "AI Poster Studio"} is Under Maintenance
+                    </h2>
+                    <div className="h-1 w-24 bg-orange-500 mx-auto rounded-full"></div>
+                  </div>
+
+                  {/* Message */}
+                  <div className="bg-white/50 border border-orange-200 rounded-lg p-6">
+                    <p className="text-orange-900 text-lg leading-relaxed mb-4">
+                      {activeTab === "classic"
+                        ? maintenanceStatus.placid.message
+                        : maintenanceStatus.ai.message}
+                    </p>
+                    <div className="text-sm text-orange-700">
+                      <p className="font-semibold mb-2">What you can do:</p>
+                      <ul className="list-disc list-inside space-y-1 text-left">
+                        {activeTab === "classic" ? (
+                          maintenanceStatus.ai.isUnderMaintenance ? (
+                            <li>Both engines are currently being upgraded. Please check back soon.</li>
+                          ) : (
+                            <>
+                              <li>Try our AI-powered Instant Posters (available now)</li>
+                              <li>Check back in a few minutes for Classic Posters</li>
+                            </>
+                          )
+                        ) : (
+                          maintenanceStatus.placid.isUnderMaintenance ? (
+                            <li>Both engines are currently being upgraded. Please check back soon.</li>
+                          ) : (
+                            <>
+                              <li>Use our Classic Posters with ready-made templates (available now)</li>
+                              <li>Check back soon for AI Posters</li>
+                            </>
+                          )
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-4 justify-center">
+                    {/* Show switch button only if the other engine is available */}
+                    {!((activeTab === "classic" && maintenanceStatus.ai.isUnderMaintenance) ||
+                      (activeTab === "instant" && maintenanceStatus.placid.isUnderMaintenance)) && (
+                        <Button
+                          onClick={() => setActiveTab(activeTab === "classic" ? "instant" : "classic")}
+                          className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white px-8 py-6 text-lg font-semibold shadow-lg"
+                        >
+                          Switch to {activeTab === "classic" ? "Instant Posters" : "Classic Posters"}
+                        </Button>
+                      )}
+
+                    <Button
+                      onClick={() => window.location.reload()}
+                      variant="outline"
+                      className="bg-white hover:bg-orange-50 border-orange-300 text-orange-900 px-8 py-6 text-lg font-semibold"
+                    >
+                      Refresh Page
+                    </Button>
+                  </div>
+
+                  {/* Footer */}
+                  <p className="text-sm text-orange-600">
+                    We appreciate your patience as we improve our services.
+                  </p>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Instant Posters (AI) Maintenance Modal */}
+          {activeTab === "instant" && maintenanceStatus.ai.isUnderMaintenance && (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in-0 duration-300">
+              <Card className="p-8 max-w-2xl w-full bg-purple-50/95 border-2 border-purple-500/50 shadow-2xl">
+                <div className="text-center space-y-6">
+                  {/* Icon */}
+                  <div className="flex justify-center">
+                    <div className="p-4 bg-purple-500/20 rounded-full">
+                      <svg className="w-16 h-16 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <div>
+                    <h2 className="text-3xl font-bold text-purple-900 mb-2 font-space">
+                      Instant AI Posters Under Maintenance
+                    </h2>
+                    <div className="h-1 w-24 bg-purple-500 mx-auto rounded-full"></div>
+                  </div>
+
+                  {/* Message */}
+                  <div className="bg-white/50 border border-purple-200 rounded-lg p-6">
+                    <p className="text-purple-900 text-lg leading-relaxed mb-4">
+                      {maintenanceStatus.ai.message}
+                    </p>
+                    <div className="text-sm text-purple-700">
+                      <p className="font-semibold mb-2">What you can do:</p>
+                      <ul className="list-disc list-inside space-y-1 text-left">
+                        {maintenanceStatus.placid.isUnderMaintenance ? (
+                          <li>Both poster creation systems are currently being upgraded. Please check back soon.</li>
+                        ) : (
+                          <>
+                            <li>Use our Classic Posters with ready-made templates (available now)</li>
+                            <li>Check back soon for AI Posters</li>
+                          </>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-4 justify-center">
+                    {!maintenanceStatus.placid.isUnderMaintenance && (
+                      <Button
+                        onClick={() => setActiveTab("classic")}
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-8 py-6 text-lg font-semibold shadow-lg"
+                      >
+                        Switch to Classic Posters
+                      </Button>
+                    )}
+
+                    <Button
+                      onClick={() => window.location.reload()}
+                      variant="outline"
+                      className="bg-white hover:bg-purple-50 border-purple-300 text-purple-900 px-8 py-6 text-lg font-semibold"
+                    >
+                      Refresh Page
+                    </Button>
+                  </div>
+
+                  {/* Footer */}
+                  <p className="text-sm text-purple-600">
+                    We appreciate your patience as we improve our services.
+                  </p>
+                </div>
+              </Card>
+            </div>
+          )}
+
           {filteredTemplates.length === 0 ? (
             <Card className="p-12 text-center animate-fadeUp">
               <div className="text-6xl mb-4">🤔</div>
@@ -383,80 +654,104 @@ export default function HomePage() {
             </Card>
           ) : (
             <div
-              className={`grid gap-6 ${
-                viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-1"
-              }`}
+              className={`grid gap-6 ${viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-1"
+                }`}
             >
-              {filteredTemplates.map((template, index) => (
-              <Card
-                key={template.template_id}
-                className="overflow-hidden transition-all duration-300 group cursor-pointer hover:scale-[1.02]"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                {/* Top Section: Thumbnail */}
-                <div className="relative w-full bg-white">
-                  <img
-                    src={getThumbnailUrl(template.thumbnail_path ?? undefined)}
-                    alt={template.template_name}
-                    className="w-full h-auto object-contain rounded-t-xl border border-border"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement
-                      target.src = `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(template.template_name)}`
-                    }}
-                  />
-
-                  {/* Template Tag Overlay */}
-                  {template.tag && (
-                    <span className="absolute top-2 right-2 bg-accent text-text-inverse text-xs px-2 py-1 rounded-full font-medium shadow-md">
-                      {template.tag}
-                    </span>
-                  )}
-
-                  {/* Hover View Overlay */}
-                  <div
-                    className="absolute inset-0 bg-gradient-to-t from-primary/60 via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center cursor-pointer"
-                    onClick={() => handlePreview(template)}
+              {filteredTemplates.map((template, index) => {
+                const isInstant = template.engine_type === "ai"
+                return (
+                  <Card
+                    key={template.template_id}
+                    className={`overflow-hidden transition-all duration-300 group cursor-pointer hover:scale-[1.02] ${isInstant ? "border-2 border-purple-400/50 shadow-lg shadow-purple-500/20" : ""
+                      }`}
+                    style={{ animationDelay: `${index * 0.1}s` }}
                   >
-                    <div className="px-4 py-2 rounded-full bg-app-elevated text-text-primary text-sm font-medium shadow-md">
-                      View Poster
+                    {/* Top Section: Thumbnail */}
+                    <div className="relative w-full bg-white">
+                      <img
+                        src={getThumbnailUrl(template.thumbnail_path ?? undefined)}
+                        alt={template.template_name}
+                        className="w-full h-auto object-contain rounded-t-xl border border-border"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.src = `/placeholder.svg?height=300&width=400&text=${encodeURIComponent(template.template_name)}`
+                        }}
+                      />
+
+                      {/* Instant Badge for AI Templates */}
+                      {isInstant && (
+                        <span className="absolute top-2 left-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-3 py-1 rounded-full font-bold shadow-lg flex items-center gap-1 animate-pulse">
+                          <Zap className="w-3 h-3" />
+                          Instant
+                        </span>
+                      )}
+
+                      {/* Template Tag Overlay */}
+                      {template.tag && (
+                        <span className="absolute top-2 right-2 bg-accent text-text-inverse text-xs px-2 py-1 rounded-full font-medium shadow-md">
+                          {template.tag}
+                        </span>
+                      )}
+
+                      {/* Hover View Overlay */}
+                      <div
+                        className={`absolute inset-0 bg-gradient-to-t ${isInstant
+                          ? "from-purple-600/60 via-purple-400/20"
+                          : "from-primary/60 via-primary/20"
+                          } to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center cursor-pointer`}
+                        onClick={() => handlePreview(template)}
+                      >
+                        <div className="px-4 py-2 rounded-full bg-app-elevated text-text-primary text-sm font-medium shadow-md">
+                          View Poster
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Bottom Section: Info Panel */}
-                <div className="p-3 bg-app-elevated space-y-2 rounded-b-xl">
-                  {/* Name and Price */}
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-semibold text-base text-text-primary font-space line-clamp-1">
-                      {template.template_name}
-                    </h3>
-                    <span className="px-2 py-1 bg-success text-text-inverse text-xs font-medium rounded-full whitespace-nowrap shadow-md">
-                      KSh {template.price}
-                    </span>
-                  </div>
+                    {/* Bottom Section: Info Panel */}
+                    <div className={`p-3 space-y-2 rounded-b-xl ${isInstant ? "bg-gradient-to-br from-purple-50 to-pink-50" : "bg-app-elevated"
+                      }`}>
+                      {/* Name and Price */}
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-base text-text-primary font-space line-clamp-1">
+                          {template.template_name}
+                        </h3>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap shadow-md ${isInstant
+                          ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                          : "bg-success text-text-inverse"
+                          }`}>
+                          KSh {template.price}
+                        </span>
+                      </div>
 
-                  {/* Fields Count */}
-                  <div className="text-sm text-text-secondary font-inter">
-                    Fields: {template.fields_required?.length || 0}
-                  </div>
+                      {/* Fields Count */}
+                      <div className="text-sm text-text-secondary font-inter">
+                        Fields: {template.fields_required?.length || 0}
+                      </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex justify-between mt-2">
-                    <Button
-                      onClick={() => handlePreview(template)}
-                      className="px-3 py-1 rounded-xl text-sm bg-accent hover:bg-accent-hover text-text-inverse shadow-sm"
-                    >
-                      Preview
-                    </Button>
-                    <Link href={`/create/${template.template_id}`}>
-                      <Button className="px-3 py-1 rounded-xl text-sm bg-primary hover:bg-primary-hover text-text-inverse shadow-sm">
-                        Customize
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </Card>
-              ))}
+                      {/* Action Buttons */}
+                      <div className="flex justify-between mt-2">
+                        <Button
+                          onClick={() => handlePreview(template)}
+                          className={`px-3 py-1 rounded-xl text-sm shadow-sm ${isInstant
+                            ? "bg-purple-500 hover:bg-purple-600 text-white"
+                            : "bg-accent hover:bg-accent-hover text-text-inverse"
+                            }`}
+                        >
+                          Preview
+                        </Button>
+                        <Link href={`/create/${template.template_id}`}>
+                          <Button className={`px-3 py-1 rounded-xl text-sm shadow-sm ${isInstant
+                            ? "bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                            : "bg-primary hover:bg-primary-hover text-text-inverse"
+                            }`}>
+                            Customize
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </div>

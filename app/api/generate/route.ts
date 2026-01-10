@@ -6,6 +6,9 @@ import { uploadDataUrlToAssets, resolveAssetPublicUrl } from "@/lib/storage"
 import { PosterStatus, type PosterStatusType } from "@/lib/status"
 import { safeErrorResponse } from "@/lib/server-errors"
 import { logInfo, logStep, logError, startTimer, elapsedMs, safeRedact } from "@/lib/logger"
+import { emitNotification } from "@/lib/notifications/emitter"
+import { NotificationType } from "@/lib/notifications/types"
+import { checkMaintenanceStatus } from "@/lib/engine-maintenance"
 
 // POST /api/generate
 // Input: { template_id, input_data, session_id }
@@ -15,6 +18,21 @@ export async function POST(req: Request) {
   try {
     const t0 = startTimer()
     logStep("api/generate", "request_received")
+
+    // Check if Placid engine is under maintenance
+    const maintenanceStatus = await checkMaintenanceStatus("placid")
+    if (maintenanceStatus.isUnderMaintenance) {
+      logInfo("api/generate", "maintenance_mode_active", { message: maintenanceStatus.message })
+      return NextResponse.json(
+        {
+          success: false,
+          error: maintenanceStatus.message,
+          maintenance: true
+        },
+        { status: 503 }
+      )
+    }
+
     const { template_uuid, input_data, session_id, template_id } = await req.json()
     logInfo("api/generate", "request_parsed", {
       session_id,
@@ -154,6 +172,31 @@ export async function POST(req: Request) {
     })
     if (!placidResponse.ok) {
       const message = placidData?.error || placidResponse.statusText
+
+      // Extract user data from input_data if available
+      const userEmail = input_data?.email || input_data?.user_email || "unknown"
+      const userPhone = input_data?.phone || input_data?.phone_number || input_data?.user_phone || "unknown"
+
+      // Emit critical notification for poster generation failure
+      emitNotification({
+        type: NotificationType.POSTER_GENERATION_FAILED,
+        actor: { type: "system", identifier: "placid-api" },
+        summary: `CRITICAL: Poster generation failed for template "${templateName || template_uuid}"`,
+        metadata: {
+          template_name: templateName || "Unknown",
+          template_id: template_id || template_uuid,
+          user_email: userEmail,
+          user_phone: userPhone,
+          engine: "Placid",
+          error: message,
+          time: new Date().toISOString(),
+          poster_id: session_id,
+          placid_status: placidResponse.status,
+        },
+      }).catch(() => {
+        // Silently ignore notification errors
+      })
+
       // Attempt to record failure in Supabase
       await writePoster({ session_id, template_id, template_uuid, image_url: null, status: PosterStatus.FAILED })
       throw new Error(`Placid API Error: ${message}`)
@@ -176,10 +219,50 @@ export async function POST(req: Request) {
     })
     logStep("api/generate", "supabase_write_done", { hasUrl: !!url, t_total_ms: elapsedMs(t0) })
 
+    // Emit notification for successful poster generation
+    if (url && templateName) {
+      emitNotification({
+        type: NotificationType.POSTER_GENERATED,
+        actor: { type: "user", identifier: session_id },
+        summary: `Poster "${templateName}" generated successfully`,
+        metadata: {
+          template_name: templateName,
+          template_id: template_id || template_uuid,
+          user_phone: "unknown", // Could be extracted from input_data if available
+          time: new Date().toISOString(),
+          poster_link: url,
+          poster_id: session_id,
+          engine: "placid",
+        },
+      }).catch(() => {
+        // Silently ignore notification errors
+      })
+    }
+
     logStep("api/generate", "respond_200", { session_id, hasUrl: !!url })
     return NextResponse.json({ success: true, image_url: url, session_id })
   } catch (error: any) {
     logError("api/generate", error)
+
+    // Emit critical notification for any poster generation failure
+    emitNotification({
+      type: NotificationType.POSTER_GENERATION_FAILED,
+      actor: { type: "system", identifier: "generate-api" },
+      summary: `CRITICAL: Poster generation error - ${error.message || "Unknown error"}`,
+      metadata: {
+        template_name: "Unknown",
+        template_id: "unknown",
+        user_phone: "unknown",
+        engine: "Unknown",
+        error: error.message || String(error),
+        time: new Date().toISOString(),
+        poster_id: "unknown",
+        error_stack: error.stack?.substring(0, 500),
+      },
+    }).catch(() => {
+      // Silently ignore notification errors
+    })
+
     return await safeErrorResponse(
       "api/generate",
       error,

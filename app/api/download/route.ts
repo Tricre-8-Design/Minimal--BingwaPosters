@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { safeErrorResponse } from "@/lib/server-errors"
+import { emitNotification } from "@/lib/notifications/emitter"
+import { NotificationType } from "@/lib/notifications/types"
 
 // GET /api/download?url=...&filename=...&mime=...
 // Proxies an external image URL and forces download with proper headers without re-encoding
@@ -27,6 +29,21 @@ export async function GET(req: Request) {
     // Preserve cache headers minimally to avoid re-fetch loops
     const cacheControl = upstream.headers.get("cache-control") || "no-store"
     headers.set("Cache-Control", cacheControl)
+
+    // Emit notification for poster download
+    emitNotification({
+      type: NotificationType.POSTER_DOWNLOADED,
+      actor: { type: "user", identifier: "unknown" },
+      summary: `Poster downloaded: ${filename}`,
+      metadata: {
+        poster_id: "unknown",
+        template_name: filename.replace(/\.[^/.]+$/, ""), // Strip extension
+        phone: "unknown",
+        time: new Date().toISOString(),
+      },
+    }).catch(() => {
+      // Silently ignore notification errors
+    })
 
     // Stream the original body directly
     const body = upstream.body

@@ -62,7 +62,7 @@ export default function AdminLogin() {
       </div>
 
       {/* Login Card */}
-      <Card 
+      <Card
         className="p-8 w-full max-w-md animate-fadeUp relative z-10"
         style={{
           background: "linear-gradient(0deg, rgba(170, 103, 230, 1) 0%, rgba(26, 189, 110, 1) 100%)",

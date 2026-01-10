@@ -28,8 +28,19 @@ export const supabase = new Proxy(
   },
 ) as ReturnType<typeof createBrowserClient>
 
-// Alias for legacy imports – uses the same anon client (no service-role key required)
-export const supabaseAdmin = supabase
+// Server-side admin client (for API routes only!)
+import { createClient } from "@supabase/supabase-js"
+
+export const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+)
 
 // Test connection function
 export const testSupabaseConnection = async () => {
@@ -51,17 +62,23 @@ export const testSupabaseConnection = async () => {
 export interface PosterTemplate {
   template_name: string
   template_id: string
-  template_uuid: string // Required field (alias for placid_id)
+  template_uuid: string | null // Nullable for AI templates
+  engine_type: "placid" | "ai" // 'placid' or 'ai'
+  ai_prompt: any | null // JSON for AI blueprint
+  ai_model: string | null
+  aspect_ratio: string | null
   price: number
   tag: string | null
   is_active: boolean
   thumbnail_path: string | null
   category: string
+  poster_reference: string | null // For AI Poster Blueprint reference image
   fields_required: Array<{
     name: string
     label: string
     type: "text" | "textarea" | "image"
     required: boolean
+    json_path?: string // Required for AI templates
   }>
 }
 
@@ -187,11 +204,10 @@ export const getThumbnailUrl = (thumbnailPath?: string | null): string => {
 export const showToast = (message: string, type: "success" | "error" = "error") => {
   // Create toast element
   const toastDiv = document.createElement("div")
-  toastDiv.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-md animate-in slide-in-from-right-4 duration-500 max-w-md ${
-    type === "success"
-      ? "bg-success text-text-inverse border border-border"
-      : "bg-danger text-text-inverse border border-border"
-  }`
+  toastDiv.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-md animate-in slide-in-from-right-4 duration-500 max-w-md ${type === "success"
+    ? "bg-success text-text-inverse border border-border"
+    : "bg-danger text-text-inverse border border-border"
+    }`
 
   // Truncate very long messages
   const displayMessage = message.length > 200 ? message.substring(0, 200) + "..." : message

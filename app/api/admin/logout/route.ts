@@ -15,7 +15,7 @@ export async function POST(req: Request) {
       try {
         const decoded = await verifyAdminToken(token)
         adminId = decoded.adminId
-      } catch {}
+      } catch { }
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -50,9 +50,20 @@ export async function POST(req: Request) {
 }
 
 function getIp(req: Request): string {
-  const xfwd = req.headers.get("x-forwarded-for") || ""
-  if (xfwd) return xfwd.split(",")[0].trim()
-  const cf = req.headers.get("cf-connecting-ip")
-  if (cf) return cf
-  return "unknown"
+  // Check x-forwarded-for first (comma-separated list, first is original client)
+  const xForwardedFor = req.headers.get('x-forwarded-for')
+  if (xForwardedFor) {
+    const firstIp = xForwardedFor.split(',')[0]?.trim()
+    if (firstIp) return firstIp
+  }
+
+  // Check x-real-ip (single IP)
+  const xRealIp = req.headers.get('x-real-ip')
+  if (xRealIp) return xRealIp.trim()
+
+  // Check Cloudflare/Vercel specific header
+  const cfConnectingIp = req.headers.get('cf-connecting-ip')
+  if (cfConnectingIp) return cfConnectingIp.trim()
+
+  return 'unknown'
 }

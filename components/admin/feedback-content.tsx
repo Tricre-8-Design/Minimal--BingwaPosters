@@ -4,8 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Search, Filter } from "lucide-react"
+import { Search, Filter, Phone, MessageCircle, Trash2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 interface FeedbackItem {
@@ -23,7 +22,7 @@ export default function FeedbackContent() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [searchTerm, setSearchTerm] = useState("")
-  const [filterStatus, setFilterStatus] = useState<"all" | "new" | "reviewed">("all")
+  const [filterStatus, setFilterStatus] = useState<"all" | "high" | "low">("all")
 
   useEffect(() => {
     const loadFeedback = async () => {
@@ -46,7 +45,6 @@ export default function FeedbackContent() {
           })),
         )
       } catch (err: any) {
-        // Record a user-friendly error state without logging to console
         setLoadError("Failed to load feedback. Please try again.")
       } finally {
         setIsLoading(false)
@@ -76,12 +74,22 @@ export default function FeedbackContent() {
     }
   }
 
-  const handleStatusChange = (feedbackId: number, newStatus: "new" | "reviewed" | "featured" | "flagged") => {
-    setFeedback((prev) => prev.map((item) => (item.id === feedbackId ? { ...item, status: newStatus } : item)))
-  }
+  const handleDelete = async (feedbackId: string | number) => {
+    if (!confirm("Are you sure you want to delete this feedback?")) return
 
-  const handleDelete = (feedbackId: number) => {
-    setFeedback((prev) => prev.filter((item) => item.id !== feedbackId))
+    try {
+      const { error } = await supabase
+        .from("feedback")
+        .delete()
+        .eq("id", feedbackId)
+
+      if (error) throw error
+
+      setFeedback((prev) => prev.filter((item) => item.id !== feedbackId))
+    } catch (error) {
+      console.error("Delete error:", error)
+      alert("Failed to delete feedback. Please try again.")
+    }
   }
 
   const filteredFeedback = feedback.filter((item) => {
@@ -90,9 +98,12 @@ export default function FeedbackContent() {
       (item.template_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.phone_number && item.phone_number.includes(searchTerm))
 
-    const matchesStatus = filterStatus === "all" || item.status === filterStatus
+    const matchesFilter =
+      filterStatus === "all" ||
+      (filterStatus === "high" && item.rating >= 4) ||
+      (filterStatus === "low" && item.rating < 3)
 
-    return matchesSearch && matchesStatus
+    return matchesSearch && matchesFilter
   })
 
   const formatDate = (dateString: string) => {
@@ -101,18 +112,6 @@ export default function FeedbackContent() {
       month: "short",
       day: "numeric",
     })
-  }
-
-  const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { color: string; label: string }> = {
-      new: { color: "bg-blue-500/20 text-blue-400 border-blue-400/30", label: "New" },
-      reviewed: { color: "bg-green-500/20 text-green-400 border-green-400/30", label: "Reviewed" },
-      featured: { color: "bg-purple-500/20 text-purple-400 border-purple-400/30", label: "Featured" },
-      flagged: { color: "bg-red-500/20 text-red-400 border-red-400/30", label: "Flagged" },
-    }
-
-    const config = statusConfig[status] || statusConfig.new
-    return <Badge className={config.color}>{config.label}</Badge>
   }
 
   const getRatingColor = (rating: number) => {
@@ -125,84 +124,86 @@ export default function FeedbackContent() {
     feedback.length > 0 ? (feedback.reduce((sum, item) => sum + item.rating, 0) / feedback.length).toFixed(1) : "0"
 
   return (
-    <div className="space-y-6 section-fade-in scroll-fade-in transition-smooth">
-      <Card className="glass p-6 animate-fade-in">
-        <h2 className="text-2xl font-bold text-white font-space mb-6">Feedback Management</h2>
+    <div className="space-y-6">
+      <Card className="bg-zinc-900 border-2 border-zinc-800 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Feedback Management</h2>
+            <p className="text-sm text-zinc-400 mt-1">Total: {feedback.length} • Average: {avgRating}★</p>
+          </div>
+        </div>
 
         {/* Search and Filter Section */}
         <div className="space-y-4">
           {/* Search Bar */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-300 w-5 h-5" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400 w-5 h-5" />
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search feedback by comment, phone, or template..."
-              className="glass pl-10 text-white placeholder-blue-300 border-white/20 focus:border-purple-400 focus:neon-purple transition-smooth font-inter h-11"
+              className="bg-zinc-800 border-zinc-700 pl-10 text-white placeholder-zinc-500 focus:border-[#2595df] focus:ring-[#2595df] h-11"
             />
           </div>
 
           {/* Filter Chips */}
           <div className="flex flex-wrap gap-2">
             <div className="flex items-center space-x-2">
-              <Filter className="w-4 h-4 text-blue-300" />
-              <span className="text-sm text-blue-200 font-inter">Filter:</span>
+              <Filter className="w-4 h-4 text-zinc-400" />
+              <span className="text-sm text-zinc-400">Filter:</span>
             </div>
 
             <Button
               onClick={() => setFilterStatus("all")}
-              className={`text-sm px-4 py-2 rounded-full transition-smooth hover-subtle ${
-                filterStatus === "all"
-                  ? "bg-purple-500/50 text-white neon-purple"
-                  : "glass bg-white/10 text-blue-200 hover:bg-white/20"
-              }`}
+              className={`text-sm px-4 py-2 rounded-lg transition-all ${filterStatus === "all"
+                  ? "bg-[#2595df] text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                }`}
             >
               All Feedback
             </Button>
 
             <Button
-              onClick={() => setFilterStatus("new")}
-              className={`text-sm px-4 py-2 rounded-full transition-smooth hover-subtle ${
-                filterStatus === "new"
-                  ? "bg-blue-500/50 text-white neon-blue"
-                  : "glass bg-white/10 text-blue-200 hover:bg-white/20"
-              }`}
+              onClick={() => setFilterStatus("high")}
+              className={`text-sm px-4 py-2 rounded-lg transition-all ${filterStatus === "high"
+                  ? "bg-green-500 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                }`}
             >
-              New Feedback
+              High Ratings (4-5★)
             </Button>
 
             <Button
-              onClick={() => setFilterStatus("reviewed")}
-              className={`text-sm px-4 py-2 rounded-full transition-smooth hover-subtle ${
-                filterStatus === "reviewed"
-                  ? "bg-green-500/50 text-white neon-green"
-                  : "glass bg-white/10 text-blue-200 hover:bg-white/20"
-              }`}
+              onClick={() => setFilterStatus("low")}
+              className={`text-sm px-4 py-2 rounded-lg transition-all ${filterStatus === "low"
+                  ? "bg-red-500 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                }`}
             >
-              Reviewed Feedback
+              Low Ratings (1-2★)
             </Button>
           </div>
         </div>
       </Card>
 
       {/* Feedback Results Section */}
-      <Card className="glass p-6 animate-fade-in">
+      <Card className="bg-zinc-900 border-2 border-zinc-800 p-6">
         {isLoading ? (
           <div className="text-center py-12">
-            <Search className="w-16 h-16 text-blue-300 mx-auto mb-4 opacity-50" />
-            <p className="text-blue-200 font-inter">Loading feedback…</p>
+            <Search className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
+            <p className="text-zinc-400">Loading feedback…</p>
           </div>
         ) : loadError ? (
           <div className="text-center py-12">
-            <Search className="w-16 h-16 text-red-300 mx-auto mb-4 opacity-60" />
-            <h3 className="text-xl font-bold text-white font-space mb-2">Unable to Load Feedback</h3>
-            <p className="text-blue-200 font-inter">{loadError}</p>
+            <Search className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-white mb-2">Unable to Load Feedback</h3>
+            <p className="text-zinc-400">{loadError}</p>
           </div>
         ) : filteredFeedback.length === 0 ? (
           <div className="text-center py-12">
-            <Search className="w-16 h-16 text-blue-300 mx-auto mb-4 opacity-50" />
-            <h3 className="text-xl font-bold text-white font-space mb-2">No Feedback Found</h3>
-            <p className="text-blue-200 font-inter">
+            <Search className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-white mb-2">No Feedback Found</h3>
+            <p className="text-zinc-400">
               {searchTerm ? `No feedback matches "${searchTerm}"` : "No user feedback available yet."}
             </p>
           </div>
@@ -211,21 +212,57 @@ export default function FeedbackContent() {
             {filteredFeedback.map((item, index) => (
               <div
                 key={item.id}
-                className="flex items-start justify-between p-4 glass rounded-lg hover:neon-purple transition-smooth animate-in fade-in-0"
+                className="flex items-start justify-between p-5 bg-zinc-800 border border-zinc-700 rounded-xl hover:border-[#2595df] transition-all duration-300"
                 style={{ animationDelay: `${index * 60}ms` }}
               >
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-1">
-                    <span className={`font-bold font-space ${getRatingColor(item.rating)}`}>{item.rating}★</span>
-                    <span className="text-xs text-blue-300 font-inter">{formatDate(item.created_at)}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <span className={`font-bold text-lg ${getRatingColor(item.rating)}`}>{item.rating}★</span>
+                    <span className="text-xs text-zinc-400">{formatDate(item.created_at)}</span>
                   </div>
                   {item.template_name && (
-                    <p className="text-sm text-blue-200 font-inter">Template: {item.template_name}</p>
+                    <p className="text-sm text-zinc-300 mb-1">
+                      <span className="text-zinc-500">Template:</span> {item.template_name}
+                    </p>
                   )}
-                  <p className="text-white font-inter leading-relaxed mt-1">{item.comment || "(no comment)"}</p>
+                  <p className="text-white leading-relaxed mb-2">{item.comment || "(no comment)"}</p>
                   {item.phone_number && (
-                    <p className="text-xs text-blue-300 font-inter mt-1">Phone: {item.phone_number}</p>
+                    <p className="text-xs text-zinc-400">
+                      <span className="text-zinc-500">Phone:</span> {item.phone_number}
+                    </p>
                   )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-2 ml-4 flex-shrink-0">
+                  <Button
+                    onClick={() => handleWhatsApp(item.phone_number)}
+                    disabled={!item.phone_number}
+                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    title="Message on WhatsApp"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span className="hidden sm:inline text-sm">WhatsApp</span>
+                  </Button>
+
+                  <Button
+                    onClick={() => handleCall(item.phone_number)}
+                    disabled={!item.phone_number}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    title="Call"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span className="hidden sm:inline text-sm">Call</span>
+                  </Button>
+
+                  <Button
+                    onClick={() => handleDelete(item.id)}
+                    className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition-all flex items-center gap-2"
+                    title="Delete feedback"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline text-sm">Delete</span>
+                  </Button>
                 </div>
               </div>
             ))}

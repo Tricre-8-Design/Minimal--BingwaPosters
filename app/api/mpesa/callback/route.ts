@@ -4,6 +4,8 @@ import { normalizePhone } from "@/lib/mpesa"
 import { isValidMpesaReceipt } from "@/lib/validation"
 import { safeErrorResponse } from "@/lib/server-errors"
 import { logInfo, logError, safeRedact } from "@/lib/logger"
+import { emitNotification } from "@/lib/notifications/emitter"
+import { NotificationType } from "@/lib/notifications/types"
 
 // POST /api/mpesa/callback
 // Handles Daraja STK Callback and updates payments status
@@ -49,37 +51,37 @@ export async function POST(req: Request) {
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey)
 
-  if (resultCode === 0) {
-    // Success: update payment to paid
-    let updateError: any = null
+    if (resultCode === 0) {
+      // Success: update payment to paid
+      let updateError: any = null
 
-    if (checkoutId) {
-      // Locate payment by CheckoutRequestID then update to store the real receipt in mpesa_code
-      const { data: payRowByCheckout } = await supabaseAdmin
-        .from("payments")
-        .select("id, session_id")
-        .eq("mpesa_code", checkoutId)
-        .limit(1)
-        .single()
+      if (checkoutId) {
+        // Locate payment by CheckoutRequestID then update to store the real receipt in mpesa_code
+        const { data: payRowByCheckout } = await supabaseAdmin
+          .from("payments")
+          .select("id, session_id")
+          .eq("mpesa_code", checkoutId)
+          .limit(1)
+          .single()
 
-      if (payRowByCheckout?.id) {
-        const updatePayload: Record<string, any> = { status: "Paid", amount: amount ?? 1 }
-        if (isValidMpesaReceipt(receipt)) {
-          updatePayload.mpesa_code = String(receipt)
-        }
-        const { error } = await supabaseAdmin.from("payments").update(updatePayload).eq("id", payRowByCheckout.id)
-        updateError = error
-        logInfo("api/mpesa/callback", "payment_update_by_checkout", { payment_id: payRowByCheckout.id, receipt_valid: isValidMpesaReceipt(receipt) })
-        // Also mark associated poster as COMPLETED via session_id
-        if (!error && payRowByCheckout.session_id) {
-          await supabaseAdmin
-            .from("generated_posters")
-            .update({ status: "COMPLETED" })
-            .eq("session_id", String(payRowByCheckout.session_id))
-          logInfo("api/mpesa/callback", "poster_mark_completed", { session_id: String(payRowByCheckout.session_id) })
+        if (payRowByCheckout?.id) {
+          const updatePayload: Record<string, any> = { status: "Paid", amount: amount ?? 1 }
+          if (isValidMpesaReceipt(receipt)) {
+            updatePayload.mpesa_code = String(receipt)
+          }
+          const { error } = await supabaseAdmin.from("payments").update(updatePayload).eq("id", payRowByCheckout.id)
+          updateError = error
+          logInfo("api/mpesa/callback", "payment_update_by_checkout", { payment_id: payRowByCheckout.id, receipt_valid: isValidMpesaReceipt(receipt) })
+          // Also mark associated poster as COMPLETED via session_id
+          if (!error && payRowByCheckout.session_id) {
+            await supabaseAdmin
+              .from("generated_posters")
+              .update({ status: "COMPLETED" })
+              .eq("session_id", String(payRowByCheckout.session_id))
+            logInfo("api/mpesa/callback", "poster_mark_completed", { session_id: String(payRowByCheckout.session_id) })
+          }
         }
       }
-    }
 
       // Fallback: update latest pending by phone number
       if (updateError && phone) {
@@ -101,40 +103,70 @@ export async function POST(req: Request) {
         }
       }
 
-    // If not linked via checkoutId above, try fallback via AccountReference
-    if (updateError && accountRef) {
-      await supabaseAdmin
-        .from("generated_posters")
-        .update({ status: "COMPLETED" })
-        .eq("session_id", String(accountRef))
-      logInfo("api/mpesa/callback", "poster_mark_completed_fallback", { session_id: String(accountRef) })
-    }
+      // If not linked via checkoutId above, try fallback via AccountReference
+      if (updateError && accountRef) {
+        await supabaseAdmin
+          .from("generated_posters")
+          .update({ status: "COMPLETED" })
+          .eq("session_id", String(accountRef))
+        logInfo("api/mpesa/callback", "poster_mark_completed_fallback", { session_id: String(accountRef) })
+      }
+
+      // Emit notification for successful payment
+      emitNotification({
+        type: NotificationType.PAYMENT_SUCCESS,
+        actor: { type: "user", identifier: phone || "unknown" },
+        summary: `Payment received: KES ${amount || 0} from ${phone || "unknown"}`,
+        metadata: {
+          amount: amount || 0,
+          phone: phone || "unknown",
+          mpesa_code: receipt || checkoutId || "unknown",
+          template_name: "unknown", // Could be fetched via session_id if needed
+          time: new Date().toISOString(),
+        },
+      }).catch(() => {
+        // Silently ignore notification errors
+      })
 
       return NextResponse.json({ success: true, status: "Paid", receipt, checkoutId, amount })
-  } else {
-    // Failure: mark pending payment as failed (by checkoutId or phone)
-    if (checkoutId) {
-      await supabaseAdmin.from("payments").update({ status: "Failed" }).eq("mpesa_code", checkoutId)
-      logInfo("api/mpesa/callback", "mark_failed_by_checkout", { checkoutId })
-    } else if (phone) {
-      const { data: pendingRows } = await supabaseAdmin
-        .from("payments")
-        .select("id")
-        .eq("phone_number", Number(phone))
-        .eq("status", "Pending")
-        .order("created_at", { ascending: false })
-        .limit(1)
-      const targetId = pendingRows?.[0]?.id
-      if (targetId) {
-        await supabaseAdmin.from("payments").update({ status: "Failed" }).eq("id", targetId)
-        logInfo("api/mpesa/callback", "mark_failed_by_phone", { payment_id: targetId })
+    } else {
+      // Failure: mark pending payment as failed (by checkoutId or phone)
+      if (checkoutId) {
+        await supabaseAdmin.from("payments").update({ status: "Failed" }).eq("mpesa_code", checkoutId)
+        logInfo("api/mpesa/callback", "mark_failed_by_checkout", { checkoutId })
+      } else if (phone) {
+        const { data: pendingRows } = await supabaseAdmin
+          .from("payments")
+          .select("id")
+          .eq("phone_number", Number(phone))
+          .eq("status", "Pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+        const targetId = pendingRows?.[0]?.id
+        if (targetId) {
+          await supabaseAdmin.from("payments").update({ status: "Failed" }).eq("id", targetId)
+          logInfo("api/mpesa/callback", "mark_failed_by_phone", { payment_id: targetId })
+        }
       }
-    }
 
-    return NextResponse.json({ success: true, status: "Failed", resultDesc }, { status: 200 })
-  }
+      // Emit notification for failed payment
+      emitNotification({
+        type: NotificationType.PAYMENT_FAILED,
+        actor: { type: "user", identifier: phone || "unknown" },
+        summary: `Payment failed from ${phone || "unknown"}`,
+        metadata: {
+          phone: phone || "unknown",
+          time: new Date().toISOString(),
+          reason: resultDesc || "Unknown error",
+        },
+      }).catch(() => {
+        // Silently ignore notification errors
+      })
+
+      return NextResponse.json({ success: true, status: "Failed", resultDesc }, { status: 200 })
+    }
   } catch (error: any) {
-    try { console.error(`[${new Date().toISOString()}] [api/mpesa/callback] ERROR`, error) } catch {}
+    try { console.error(`[${new Date().toISOString()}] [api/mpesa/callback] ERROR`, error) } catch { }
     return await safeErrorResponse(
       "api/mpesa/callback",
       error,

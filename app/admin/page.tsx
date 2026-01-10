@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BarChart3, ImageIcon, MessageCircle, CreditCard } from "lucide-react"
+import { BarChart3, ImageIcon, MessageCircle, CreditCard, Settings } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 
@@ -13,6 +13,10 @@ import DashboardContent from "@/components/admin/dashboard-content"
 import TemplatesContent from "@/components/admin/templates-content"
 import FeedbackContent from "@/components/admin/feedback-content"
 import TransactionsContent from "@/components/admin/transactions-content"
+import NotificationsTable from "@/components/admin/notifications/NotificationsTable"
+import NotificationUsers from "@/components/admin/notifications/NotificationUsers"
+import NotificationTemplates from "@/components/admin/notifications/NotificationTemplates"
+import SystemSettingsContent from "@/components/admin/system-settings-content"
 
 interface DashboardStats {
   totalPosters: number
@@ -255,7 +259,7 @@ export default function AdminPage() {
               <p className="text-white/80 font-inter text-sm md:text-base">Real-time poster analytics</p>
             </div>
           </div>
-          
+
           <Link href="/">
             <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">
               Back to Home
@@ -269,7 +273,7 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {/* Tab Navigation */}
-            <TabsList className="sticky top-0 z-50 grid w-full grid-cols-4 gap-2 h-auto p-1 bg-surface/90 backdrop-blur-md border border-white/20 rounded-xl mb-6 shadow-soft">
+            <TabsList className="sticky top-0 z-50 grid w-full grid-cols-8 gap-2 h-auto p-1 bg-surface/90 backdrop-blur-md border border-white/20 rounded-xl mb-6 shadow-soft">
               <TabsTrigger
                 value="dashboard"
                 className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
@@ -301,6 +305,38 @@ export default function AdminPage() {
                 <CreditCard className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Transactions</span>
               </TabsTrigger>
+
+              <TabsTrigger
+                value="notifications"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Notifications</span>
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="notification-users"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Users</span>
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="notification-templates"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
+              >
+                <MessageCircle className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Messages</span>
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="system-settings"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
+              >
+                <Settings className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Settings</span>
+              </TabsTrigger>
             </TabsList>
 
             {/* Content wrapped in cards with glass effect */}
@@ -319,6 +355,22 @@ export default function AdminPage() {
 
               <TabsContent value="transactions" className="animate-in fade-in-0 duration-300 mt-0">
                 <TransactionsContent />
+              </TabsContent>
+
+              <TabsContent value="notifications" className="animate-in fade-in-0 duration-300 mt-0">
+                <NotificationsTable />
+              </TabsContent>
+
+              <TabsContent value="notification-users" className="animate-in fade-in-0 duration-300 mt-0">
+                <NotificationUsers />
+              </TabsContent>
+
+              <TabsContent value="notification-templates" className="animate-in fade-in-0 duration-300 mt-0">
+                <NotificationTemplates />
+              </TabsContent>
+
+              <TabsContent value="system-settings" className="animate-in fade-in-0 duration-300 mt-0">
+                <SystemSettingsContent />
               </TabsContent>
             </div>
           </Tabs>

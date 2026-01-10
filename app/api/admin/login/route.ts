@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js"
 import { compare } from "bcryptjs"
 import { signAdminToken } from "@/lib/auth/session"
 import { safeErrorResponse } from "@/lib/server-errors"
+import { emitNotification } from "@/lib/notifications/emitter"
+import { NotificationType } from "@/lib/notifications/types"
 
 // POST /api/admin/login
 // Server-side login: validates credentials, enforces lockouts, issues JWT cookie (10 min), and logs actions.
@@ -67,6 +69,21 @@ export async function POST(req: Request) {
       .eq("id", admin.id)
     await supabase.from("admin_logs").insert({ admin_id: admin.id, action: "login", ip, timestamp: now.toISOString() })
 
+    // Emit notification for admin login
+    emitNotification({
+      type: NotificationType.ADMIN_LOGIN,
+      actor: { type: "admin", identifier: email },
+      summary: `Admin login: ${email}`,
+      metadata: {
+        email,
+        ip,
+        userAgent: req.headers.get("user-agent") || "unknown",
+        time: now.toISOString(),
+      },
+    }).catch(() => {
+      // Silently ignore notification errors
+    })
+
     const token = await signAdminToken({ adminId: String(admin.id), role: admin.role || "admin" }, 600)
     const res = NextResponse.json({ success: true })
     res.cookies.set("admin_session", token, {
@@ -84,10 +101,20 @@ export async function POST(req: Request) {
 }
 
 function getIp(req: Request): string {
-  const xfwd = req.headers.get("x-forwarded-for") || ""
-  if (xfwd) return xfwd.split(",")[0].trim()
-  // Cloudflare / Vercel proxies may use other headers
-  const cf = req.headers.get("cf-connecting-ip")
-  if (cf) return cf
-  return "unknown"
+  // Check x-forwarded-for first (comma-separated list, first is original client)
+  const xForwardedFor = req.headers.get('x-forwarded-for')
+  if (xForwardedFor) {
+    const firstIp = xForwardedFor.split(',')[0]?.trim()
+    if (firstIp) return firstIp
+  }
+
+  // Check x-real-ip (single IP)
+  const xRealIp = req.headers.get('x-real-ip')
+  if (xRealIp) return xRealIp.trim()
+
+  // Check Cloudflare/Vercel specific header
+  const cfConnectingIp = req.headers.get('cf-connecting-ip')
+  if (cfConnectingIp) return cfConnectingIp.trim()
+
+  return 'unknown'
 }

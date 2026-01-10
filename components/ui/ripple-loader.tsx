@@ -18,38 +18,61 @@ type RippleLoaderProps = {
   className?: string
 }
 
-export default function RippleLoader({ size = 120, color = "#7c3aed", speed = 1.6, className = "" }: RippleLoaderProps) {
-  const circleStyle: React.CSSProperties = {
-    position: "absolute",
-    borderRadius: "9999px",
-    border: `3px solid ${color}`,
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-  }
-
+export default function RippleLoader({ size = 120, color = "#a855f7", speed = 1.5, className = "" }: RippleLoaderProps) {
   return (
     <div
       role="progressbar"
       aria-label="Loading"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      className={`relative flex items-center justify-center ${className}`}
+      className={`relative ${className}`}
       style={{ width: size, height: size }}
     >
-      {[0, 0.33, 0.66].map((delay, idx) => (
-        <motion.span
-          key={idx}
-          style={{ ...circleStyle, width: size * 0.3, height: size * 0.3 }}
-          initial={{ scale: 0.6, opacity: 0.8 }}
-          animate={{ scale: 1.8, opacity: 0 }}
-          transition={{ duration: speed, ease: "easeOut", repeat: Infinity, repeatDelay: 0.2, delay }}
+      {/* Create 3 ripples with staggered delays */}
+      {[0, 1, 2].map((index) => (
+        <motion.div
+          key={index}
+          className="absolute inset-0"
+          style={{
+            border: `3px solid ${color}`,
+            borderRadius: "9999px",
+          }}
+          initial={{
+            scale: 0,
+            opacity: 0.8
+          }}
+          animate={{
+            scale: 1.5,
+            opacity: 0,
+          }}
+          transition={{
+            duration: speed,
+            ease: "easeOut",
+            repeat: Infinity,
+            delay: index * (speed / 3),
+          }}
         />
       ))}
+
       {/* Center dot */}
-      <span
-        aria-hidden
-        style={{ width: size * 0.1, height: size * 0.1, background: color, ...circleStyle }}
+      <motion.div
+        className="absolute"
+        style={{
+          width: size * 0.15,
+          height: size * 0.15,
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          backgroundColor: color,
+          borderRadius: "9999px",
+        }}
+        animate={{
+          scale: [1, 1.2, 1],
+          opacity: [0.8, 1, 0.8],
+        }}
+        transition={{
+          duration: speed * 0.6,
+          ease: "easeInOut",
+          repeat: Infinity,
+        }}
       />
     </div>
   )

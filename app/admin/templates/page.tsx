@@ -20,6 +20,7 @@ interface FieldRequirement {
   label: string
   type: "text" | "textarea" | "image"
   required: boolean
+  json_path?: string
 }
 
 export default function AdminTemplates() {
@@ -29,12 +30,15 @@ export default function AdminTemplates() {
   const [isCreating, setIsCreating] = useState(false)
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [engineFilter, setEngineFilter] = useState<"all" | "placid" | "ai">("all")
 
   // Form state
   const [formData, setFormData] = useState({
     template_name: "",
     template_id: "",
     template_uuid: "",
+    engine_type: "placid" as "placid" | "ai",
+    ai_prompt: "",
     price: 0,
     tag: "",
     category: "",
@@ -82,7 +86,7 @@ export default function AdminTemplates() {
     return () => {
       try {
         supabaseAdmin.removeChannel(channel)
-      } catch {}
+      } catch { }
     }
   }, [])
 
@@ -119,18 +123,47 @@ export default function AdminTemplates() {
 
   const handleSave = async () => {
     try {
-      if (!formData.template_name || !formData.template_id || !formData.template_uuid || !formData.category) {
+      if (!formData.template_name || !formData.template_id || !formData.category) {
         showToast("Please fill in all required fields", "error")
         return
       }
 
+      // Validate based on engine type
+      if (formData.engine_type === "placid" && !formData.template_uuid) {
+        showToast("Placid templates require a Template UUID", "error")
+        return
+      }
+
+      let parsedAiPrompt = null
+      if (formData.engine_type === "ai") {
+        if (!formData.ai_prompt) {
+          showToast("AI templates require a Blueprint JSON", "error")
+          return
+        }
+        try {
+          parsedAiPrompt = JSON.parse(formData.ai_prompt)
+        } catch (e) {
+          showToast("Invalid JSON in AI Poster Blueprint", "error")
+          return
+        }
+
+        // Validate json_path for all fields
+        const missingPath = formData.fields_required.some((f) => !f.json_path)
+        if (missingPath) {
+          showToast("All fields in AI templates must have a JSON Path", "error")
+          return
+        }
+      }
+
       const templateData = {
         ...formData,
+        template_uuid: formData.engine_type === "ai" ? null : formData.template_uuid,
+        ai_prompt: parsedAiPrompt,
         fields_required: formData.fields_required,
       }
 
       // Saving template
-      
+
       if (editingTemplate) {
         // Update existing template
         const { error } = await supabaseAdmin
@@ -212,7 +245,9 @@ export default function AdminTemplates() {
     setFormData({
       template_name: template.template_name,
       template_id: template.template_id,
-      template_uuid: template.template_uuid,
+      template_uuid: template.template_uuid || "",
+      engine_type: template.engine_type || "placid",
+      ai_prompt: template.ai_prompt ? JSON.stringify(template.ai_prompt, null, 2) : "",
       price: template.price,
       tag: template.tag || "",
       category: template.category,
@@ -227,6 +262,8 @@ export default function AdminTemplates() {
       template_name: "",
       template_id: "",
       template_uuid: "",
+      engine_type: "placid",
+      ai_prompt: "",
       price: 0,
       tag: "",
       category: "",
@@ -240,7 +277,7 @@ export default function AdminTemplates() {
   const addField = () => {
     setFormData((prev) => ({
       ...prev,
-      fields_required: [...prev.fields_required, { name: "", label: "", type: "text", required: true }],
+      fields_required: [...prev.fields_required, { name: "", label: "", type: "text", required: true, json_path: "" }],
     }))
   }
 
@@ -335,21 +372,74 @@ export default function AdminTemplates() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-text-primary">Poster Templates</h1>
         <div className="flex items-center gap-2">
+          {/* Engine Filter */}
+          <div className="flex items-center bg-white rounded-lg border border-border p-1 mr-2">
+            <button
+              onClick={() => setEngineFilter("all")}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${engineFilter === "all" ? "bg-primary text-text-inverse shadow-sm" : "text-text-secondary hover:text-text-primary"
+                }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setEngineFilter("placid")}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${engineFilter === "placid"
+                ? "bg-primary text-text-inverse shadow-sm"
+                : "text-text-secondary hover:text-text-primary"
+                }`}
+            >
+              Placid
+            </button>
+            <button
+              onClick={() => setEngineFilter("ai")}
+              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${engineFilter === "ai"
+                ? "bg-primary text-text-inverse shadow-sm"
+                : "text-text-secondary hover:text-text-primary"
+                }`}
+            >
+              AI
+            </button>
+          </div>
+
           <Button
             onClick={refreshTemplates}
-            className="bg-primary hover:bg-primary-hover text-text-inverse"
+            className="bg-app-elevated hover:bg-primary-soft text-text-primary border border-border"
             disabled={refreshing}
+            size="sm"
           >
             {refreshing ? (
-              <span className="flex items-center"><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>Refreshing…</span>
+              <span className="flex items-center">
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary mr-2"></div>Refreshing…
+              </span>
             ) : (
-              <span className="flex items-center"><Upload className="w-4 h-4 mr-2" />Refresh Templates</span>
+              <span className="flex items-center">
+                <Upload className="w-3 h-3 mr-2" />
+                Refresh
+              </span>
             )}
           </Button>
-          <Button onClick={() => setIsCreating(true)} className="bg-primary hover:bg-primary-hover text-text-inverse">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Template
-          </Button>
+          <div className="flex space-x-2">
+            <Button
+              onClick={() => {
+                setFormData((prev) => ({ ...prev, engine_type: "placid" }))
+                setIsCreating(true)
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Placid
+            </Button>
+            <Button
+              onClick={() => {
+                setFormData((prev) => ({ ...prev, engine_type: "ai" }))
+                setIsCreating(true)
+              }}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add AI
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -357,7 +447,12 @@ export default function AdminTemplates() {
       {isCreating && (
         <Card className="shadow-md">
           <CardHeader>
-            <CardTitle className="text-text-primary">{editingTemplate ? "Edit Template" : "Create New Template"}</CardTitle>
+            <CardTitle className="text-text-primary flex items-center justify-between">
+              <span>{editingTemplate ? "Edit Template" : "Create New Template"}</span>
+              <Badge className={formData.engine_type === "ai" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}>
+                {formData.engine_type === "ai" ? "AI Render Engine" : "Placid Render Engine"}
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent className="bg-white p-6 rounded-b-lg space-y-4 border border-border">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -385,18 +480,20 @@ export default function AdminTemplates() {
                   className=""
                 />
               </div>
-              <div>
-                <Label htmlFor="template_uuid" className="text-text-secondary font-medium">
-                  Template UUID (Placid ID) *
-                </Label>
-                <Input
-                  id="template_uuid"
-                  value={formData.template_uuid}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, template_uuid: e.target.value }))}
-                  placeholder="e.g., abc123-def456-ghi789"
-                  className=""
-                />
-              </div>
+              {formData.engine_type === "placid" && (
+                <div>
+                  <Label htmlFor="template_uuid" className="text-text-secondary font-medium">
+                    Template UUID (Placid ID) *
+                  </Label>
+                  <Input
+                    id="template_uuid"
+                    value={formData.template_uuid}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, template_uuid: e.target.value }))}
+                    placeholder="e.g., abc123-def456-ghi789"
+                    className=""
+                  />
+                </div>
+              )}
               <div>
                 <Label htmlFor="price" className="text-text-secondary font-medium">
                   Price (KSh)
@@ -444,6 +541,54 @@ export default function AdminTemplates() {
                 className=""
               />
             </div>
+
+            {/* AI Specific Section */}
+            {formData.engine_type === "ai" && (
+              <div className="border border-purple-200 bg-purple-50 rounded-lg p-4 space-y-4">
+                <h3 className="font-semibold text-purple-900 flex items-center">
+                  <span className="mr-2">🤖</span> AI Poster Blueprint (Locked Design)
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="md:col-span-1">
+                    <Label className="text-purple-800 font-medium mb-2 block">Reference Poster Preview</Label>
+                    <div className="border border-purple-200 rounded bg-white p-2 flex items-center justify-center min-h-[150px]">
+                      {formData.thumbnail_path ? (
+                        <img
+                          src={getThumbnailUrl(formData.thumbnail_path)}
+                          alt="Reference"
+                          className="max-w-full max-h-40 object-contain"
+                        />
+                      ) : (
+                        <div className="text-center text-purple-400 text-sm">
+                          <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p>Upload thumbnail to see reference</p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-purple-600 mt-2">
+                      This visual is used as the style reference for the AI model.
+                    </p>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <Label htmlFor="ai_prompt" className="text-purple-800 font-medium mb-2 block">
+                      Poster Blueprint JSON *
+                    </Label>
+                    <Textarea
+                      id="ai_prompt"
+                      value={formData.ai_prompt}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, ai_prompt: e.target.value }))}
+                      placeholder='{ "layers": [ ... ], "dimensions": { ... } }'
+                      className="font-mono text-xs min-h-[150px] bg-white"
+                    />
+                    <p className="text-xs text-purple-600 mt-1">
+                      Paste the fixed JSON structure representing the poster layout.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Thumbnail Upload Section */}
             <div>
@@ -540,8 +685,7 @@ export default function AdminTemplates() {
                   <ul className="list-disc list-inside space-y-1">
                     <li>Supported formats: JPG, PNG, GIF, WebP</li>
                     <li>Maximum file size: 5MB</li>
-                    <li>Recommended dimensions: 400x300 pixels</li>
-                    <li>Images will be stored as base64 in the database</li>
+                    <li>For AI Templates: Upload the exact reference poster image.</li>
                   </ul>
                 </div>
               </div>
@@ -599,6 +743,7 @@ export default function AdminTemplates() {
                         </SelectContent>
                       </Select>
                     </div>
+
                     <div className="flex items-center space-x-2">
                       <input
                         type="checkbox"
@@ -616,6 +761,22 @@ export default function AdminTemplates() {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
+
+                    {/* JSON Path for AI Templates (Full Width) */}
+                    {formData.engine_type === "ai" && (
+                      <div className="col-span-full mt-2 bg-purple-50 p-2 rounded border border-purple-100">
+                        <Label className="text-purple-800 text-xs">JSON Path Mapping (Required)</Label>
+                        <Input
+                          value={field.json_path || ""}
+                          onChange={(e) => updateField(index, { json_path: e.target.value })}
+                          placeholder="e.g., layers[0].text"
+                          className="bg-white border-purple-200 text-sm h-8"
+                        />
+                        <p className="text-[10px] text-purple-600 mt-1">
+                          Maps this field to a value in the Blueprint JSON.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -632,117 +793,125 @@ export default function AdminTemplates() {
               </Button>
             </div>
           </CardContent>
-        </Card>
-      )}
+        </Card >
+      )
+      }
 
       {/* Templates List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {templates.map((template) => (
-          <Card key={template.template_id} className="bg-white shadow-md rounded-lg transition hover:shadow-lg">
-            <CardHeader className="p-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-text-primary text-2xl font-bold tracking-tight leading-tight">
-                    {template.template_name}
-                  </CardTitle>
-                  <p className="text-sm text-text-muted mt-1">ID: {template.template_id}</p>
-                  <p className="text-sm text-text-muted">UUID: {template.template_uuid}</p>
+        {templates
+          .filter((t) => engineFilter === "all" || (t.engine_type || "placid") === engineFilter)
+          .map((template) => (
+            <Card key={template.template_id} className="bg-white shadow-md rounded-lg transition hover:shadow-lg">
+              <CardHeader className="p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-text-primary text-2xl font-bold tracking-tight leading-tight">
+                      {template.template_name}
+                    </CardTitle>
+                    <p className="text-sm text-text-muted mt-1">ID: {template.template_id}</p>
+                    <p className="text-sm text-text-muted">UUID: {template.template_uuid}</p>
+                  </div>
+                  <div className="flex space-x-1">
+                    <Button
+                      onClick={() => handleEdit(template)}
+                      size="sm"
+                      className="bg-app-elevated text-text-primary hover:bg-primary-soft"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      onClick={() => handleDelete(template.template_id)}
+                      size="sm"
+                      className="bg-danger hover:bg-danger/90 text-text-inverse"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex space-x-1">
-                  <Button
-                    onClick={() => handleEdit(template)}
-                    size="sm"
-                    className="bg-app-elevated text-text-primary hover:bg-primary-soft"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    onClick={() => handleDelete(template.template_id)}
-                    size="sm"
-                    className="bg-danger hover:bg-danger/90 text-text-inverse"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <CardContent className="bg-app-elevated p-4 rounded-b-md space-y-2 border border-border">
-                    {/* Thumbnail Display */}
-                    <div className="relative">
-                      <img
-                        src={getThumbnailUrl(template.thumbnail_path || "")}
-                        alt={template.template_name}
-                        className="w-full max-h-48 object-contain rounded mb-3 border border-border bg-white"
-                        onError={(e) => {
-                          // Silent image load failure; fallback to placeholder
-                          const target = e.target as HTMLImageElement
-                          target.src = `/placeholder.svg?height=128&width=200&text=${encodeURIComponent(template.template_name)}`
-                        }}
-                      />
+              </CardHeader>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <CardContent className="bg-app-elevated p-4 rounded-b-md space-y-2 border border-border">
+                      {/* Thumbnail Display */}
+                      <div className="relative">
+                        <img
+                          src={getThumbnailUrl(template.thumbnail_path || "")}
+                          alt={template.template_name}
+                          className="w-full max-h-48 object-contain rounded mb-3 border border-border bg-white"
+                          onError={(e) => {
+                            // Silent image load failure; fallback to placeholder
+                            const target = e.target as HTMLImageElement
+                            target.src = `/placeholder.svg?height=128&width=200&text=${encodeURIComponent(template.template_name)}`
+                          }}
+                        />
 
-                      {/* Thumbnail Status Indicator */}
-                      <div className="absolute top-2 right-2">
-                        {template.thumbnail_path ? (
-                          <div className="bg-success text-text-inverse px-2 py-1 rounded-full text-xs flex items-center">
-                            <ImageIcon className="w-3 h-3 mr-1" />
-                            Linked
-                          </div>
-                        ) : (
-                          <div className="bg-app-elevated text-text-muted px-2 py-1 rounded-full text-xs">No Image</div>
-                        )}
+                        {/* Thumbnail Status Indicator */}
+                        <div className="absolute top-2 right-2">
+                          {template.thumbnail_path ? (
+                            <div className="bg-success text-text-inverse px-2 py-1 rounded-full text-xs flex items-center">
+                              <ImageIcon className="w-3 h-3 mr-1" />
+                              Linked
+                            </div>
+                          ) : (
+                            <div className="bg-app-elevated text-text-muted px-2 py-1 rounded-full text-xs">No Image</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Removed overview, badges, and progress bar per admin UI update */}
+                      {/* Removed overview, badges, and progress bar per admin UI update */}
 
-                    <div className="flex justify-between items-center mb-2">
-                      <Badge className="bg-primary-soft text-primary">{template.category}</Badge>
-                      <span className="font-semibold text-text-primary">KSh {template.price}</span>
-                    </div>
-                    <div className="text-xs text-text-muted">Fields: {template.fields_required?.length || 0}</div>
-                  </CardContent>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-sm text-text-primary">Click to edit or delete this template.</p>
-                  <p className="text-xs text-text-muted">Template ID: {template.template_id}</p>
-                  <p className="text-xs text-text-muted">Thumbnail: {template.thumbnail_path ? template.thumbnail_path : "None"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {/* Active toggle */}
-            <div className="flex justify-end items-center mt-2 px-4 pb-4">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={template.is_active}
-                onClick={() => handleToggleActive(template)}
-                className={`relative inline-flex items-center h-7 px-2 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
-                  template.is_active ? "bg-success text-text-inverse" : "bg-app-elevated text-text-primary border border-border"
-                }`}
-                title={template.is_active ? "Active" : "Inactive"}
-              >
-                <span
-                  className={`absolute left-1 top-1 w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
-                    template.is_active ? "translate-x-6" : "translate-x-0"
-                  }`}
-                />
-                <span className="text-xs font-medium ml-8">{template.is_active ? "Active" : "Inactive"}</span>
-              </button>
-            </div>
-          </Card>
-        ))}
+                      <div className="flex justify-between items-center mb-2">
+                        <Badge className="bg-primary-soft text-primary">{template.category}</Badge>
+                        <Badge className={template.engine_type === "ai" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"}>
+                          {template.engine_type === "ai" ? "AI Render" : "Placid Render"}
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-semibold text-text-primary">KSh {template.price}</span>
+                      </div>
+                      <div className="text-xs text-text-muted">Fields: {template.fields_required?.length || 0}</div>
+                    </CardContent>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-sm text-text-primary">Click to edit or delete this template.</p>
+                    <p className="text-xs text-text-muted">Template ID: {template.template_id}</p>
+                    <p className="text-xs text-text-muted">Thumbnail: {template.thumbnail_path ? template.thumbnail_path : "None"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              {/* Active toggle */}
+              <div className="flex justify-end items-center mt-2 px-4 pb-4">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={template.is_active}
+                  onClick={() => handleToggleActive(template)}
+                  className={`relative inline-flex items-center h-7 px-2 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${template.is_active ? "bg-success text-text-inverse" : "bg-app-elevated text-text-primary border border-border"
+                    }`}
+                  title={template.is_active ? "Active" : "Inactive"}
+                >
+                  <span
+                    className={`absolute left-1 top-1 w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${template.is_active ? "translate-x-6" : "translate-x-0"
+                      }`}
+                  />
+                  <span className="text-xs font-medium ml-8">{template.is_active ? "Active" : "Inactive"}</span>
+                </button>
+              </div>
+            </Card>
+          ))}
       </div>
 
-      {templates.length === 0 && (
-        <Card className="bg-white shadow-md rounded-lg">
-          <CardContent className="text-center py-8 text-text-primary">
-            <p>No templates found. Create your first template!</p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+      {
+        templates.length === 0 && (
+          <Card className="bg-white shadow-md rounded-lg">
+            <CardContent className="text-center py-8 text-text-primary">
+              <p>No templates found. Create your first template!</p>
+            </CardContent>
+          </Card>
+        )
+      }
+    </div >
   )
 }
