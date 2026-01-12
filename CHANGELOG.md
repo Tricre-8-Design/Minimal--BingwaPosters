@@ -2,6 +2,66 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3] - 2026-01-13
+
+### User Experience & Payment Improvements ✅
+- **Payment Flow Optimization**:
+  - **Instant Success Detection**: Refined polling logic (2s frequency) to immediately detect successful payments from webhooks.
+  - **Robust Verification**: Added dual-table checks (`generated_posters` and `payments`) to prevent false "pending" states.
+  - **Logic**: Removed artificial delays after payment, ensuring snappy redirection to the download page.
+  
+- **Download Page Redesign**:
+  - **Focused Layout**: completely re-organized `app/download/[sessionId]` to center-align content.
+  - **Poster First**: Prioritized the poster preview at the top of the view hierarchy.
+  - **Simplified Actions**: Removed redundant "Share on WhatsApp" and "Copy Link" buttons to focus on the primary "Download" action.
+  
+- **Feedback System Fixes**:
+  - **Modal Positioning**: Fixed a layout bug where the feedback modal wasn't centering correctly by implementing a robust flex-wrapper solution that isolates it from animation transforms.
+  - **Code Cleanup**: Removed duplicate imports and cleaned up syntax errors in the download page component.
+
+## [0.5.1] - 2026-01-12
+
+### Payment System Migration (PesaFlux) ✅
+- **Migration from M-Pesa Daraja to PesaFlux**: Completed full migration of the payment processing system to PesaFlux.
+  - Replaced direct M-Pesa Daraja integration with PesaFlux API for improved reliability and simpler management.
+  - **New Features**:
+      - `lib/pesaflux.ts`: Created new utility library for PesaFlux STK Push and phone normalization.
+      - Updated API endpoints:
+          - `/api/mpesa/initiate`: Now initiates transactions via PesaFlux.
+          - `/api/mpesa/callback`: Handles PesaFlux webhooks (mapping `TransactionID` and `TransactionReceipt`).
+  - **Cleanup**:
+      - Removed legacy `lib/mpesa.ts` file.
+      - Updated `README.md` with new environment variable requirements and flow descriptions.
+      - Added `.env.example` template for easier setup.
+## [0.5.2] - 2026-01-12
+
+### Payment & UI/UX Security Overhaul ✅
+- **Secure AI Poster Generation**:
+  - Implemented immediate locking of AI-generated posters (`PosterStatus.AWAITING_PAYMENT`).
+  - Added secure overlay with blur effect and "Payment Required" message on creation page.
+  - Disabled right-click context menu and drag interactions on locked poster previews to prevent bypass.
+  
+- **Payment Flow & Page Redesign**:
+  - **Relocking Loop Fix**: Resolved critical bug where paid posters would revert to locked status due to race conditions.
+  - **Enhanced UI**: Redesigned `/payment/[sessionId]` page with:
+    - Glassmorphism card design (`bg-surface/95`).
+    - Clearer STK Push instructions and countdown timer.
+    - Polling mechanism optimization to verify payment via both `payments` table and `generated_posters` status.
+    - Optimistic UI updates to prevent status flickering.
+
+- **Celebratory Download Experience**:
+  - **Redesign**: Complete overhaul of `/download/[sessionId]` page.
+  - **Confetti Animation**: Added `canvas-confetti` celebration on successful page load.
+  - **Feedback System**: Integrated rating and comment modal for user feedback after download.
+  - **Suggestions**: Added "You might also like" section with suggested templates.
+  - **Visuals**: Animated background elements, glowing buttons, and improved typography.
+
+- **Technical Improvements**:
+  - Added `@types/canvas-confetti` for TypeScript support.
+  - Refined Supabase query logic for payment status verification.
+  - Improved error handling in payment polling loop.
+
+
 ## [0.5.0] - 2026-01-10
 
 ### Engine-Specific Maintenance Mode System ✅

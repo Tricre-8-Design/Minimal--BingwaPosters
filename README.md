@@ -24,7 +24,7 @@ PosterGen is a Next.js-based web application that enables users to create profes
 
 - **Template Library**: Pre-designed poster templates for different categories (Data, SMS, Minutes, Announcements, Others)
 - **Customization Engine**: Drag-and-drop interface to personalize templates with user data
-- **Payment Integration**: Secure payments via M-Pesa (Daraja STK Push) for downloads
+- **Payment Integration**: Secure payments via PesaFlux (M-Pesa STK Push) for downloads
 - **Admin Dashboard**: Comprehensive admin panel for managing templates, viewing analytics, tracking feedback, and monitoring transactions
 - **Automated Workflow**: Direct Placid 2.0 REST API for backend poster generation
 
@@ -34,7 +34,7 @@ PosterGen is a Next.js-based web application that enables users to create profes
 1. **Browse Templates** - Users visit the homepage to view available templates with search and category filtering
 2. **Preview & Customize** - Select a template and customize it by filling in required fields
 3. **Generate Poster** - Submit customization data to generate a poster image
-4. **Payment** - Pay via M-Pesa STK Push to download the generated poster
+4. **Payment** - Pay via PesaFlux (M-Pesa STK Push) to download the generated poster
 5. **Download** - Download the finalized poster image
 
 #### **Admin Side**
@@ -93,7 +93,7 @@ components/
 
 lib/
 ├── supabase.ts            # Supabase client, database types, helper functions
-├── mpesa.ts               # M-Pesa (Daraja) payment gateway utilities
+├── pesaflux.ts            # PesaFlux payment gateway utilities
 └── utils.ts               # Utility functions
 
 hooks/
@@ -188,7 +188,7 @@ public/
 ### API Endpoints
 
 #### **POST /api/mpesa/initiate**
-**Purpose**: Initiate Daraja STK Push to user's phone
+**Purpose**: Initiate PesaFlux STK Push to user's phone
 
 **Request Body**:
 \`\`\`json
@@ -214,13 +214,13 @@ public/
 
 **What Happens**:
 1. Validates session and inserts a pending payment row (`status: "Pending"`)
-2. Calls Daraja `processrequest` to trigger STK Push
-3. Stores `CheckoutRequestID` in `payments` (`mpesa_code` field)
+2. Calls PesaFlux `initiatestk` to trigger STK Push
+3. Stores `transaction_request_id` in `payments` (`mpesa_code` field)
 
 #### **POST /api/mpesa/callback**
-**Purpose**: Handle Daraja STK callback and update payment status
+**Purpose**: Handle PesaFlux Webhook and update payment status
 
-**Request Body (from Safaricom)**:
+**Request Body (from PesaFlux)**:
 \`\`\`json
 {
   "Body": {
@@ -242,7 +242,7 @@ public/
 \`\`\`
 
 **What Happens**:
-1. Marks payment as `Paid` when `ResultCode === 0`, saving receipt
+1. Marks payment as `Paid` when `ResponseCode === 0`, saving receipt
 2. Otherwise marks payment as `Failed`
 3. Links by `CheckoutRequestID` or latest pending row by phone
 
@@ -571,19 +571,15 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key (server-only)
 - Create a bucket named `templates-thumbnails` and allow public read access (or serve via signed URLs).
 - Store thumbnails under `thumbnails/<fileName>`; the app resolves public URLs via `getThumbnailUrl(thumbnail_path)`.
 
-### 2. **M-Pesa Daraja (Payment Gateway)**
+### 2. **PesaFlux (Payment Gateway)**
 
 **Environment Variables**:
 \`\`\`
-MPESA_CONSUMER_KEY=your-consumer-key
-MPESA_CONSUMER_SECRET=your-consumer-secret
-MPESA_SHORTCODE=your-paybill-or-till
-MPESA_PASSKEY=your-lnm-passkey
-MPESA_CALLBACK_URL=https://your-domain/api/mpesa/callback
-MPESA_ENVIRONMENT=production # or sandbox
+PESAFLUX_API_KEY=your-api-key
+PESAFLUX_EMAIL=your-email
 \`\`\`
 
-**Flow**: User → STK Push to phone → User authorizes → Callback confirmation → Payment recorded
+**Flow**: User → STK Push (via PesaFlux) → User authorizes → Webhook confirmation → Payment recorded
 
 ### 3. **Placid 2.0 (Poster Generation)**
 
@@ -607,16 +603,9 @@ PLACID_API_KEY=your-placid-api-token
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 
-# M-Pesa Daraja
-MPESA_CONSUMER_KEY=your-consumer-key
-MPESA_CONSUMER_SECRET=your-consumer-secret
-MPESA_SHORTCODE=your-paybill-or-till
-MPESA_PASSKEY=your-lnm-passkey
-MPESA_CALLBACK_URL=https://your-domain/api/mpesa/callback
-# Preferred env variable (falls back to MPESA_ENVIRONMENT if not set)
-MPESA_ENV=sandbox
-# Optional override; if unset, derived from MPESA_ENV
-MPESA_BASE_URL=https://sandbox.safaricom.co.ke
+# PesaFlux
+PESAFLUX_API_KEY=your-api-key
+PESAFLUX_EMAIL=your-email
 
 # Placid 2.0
 PLACID_API_KEY=your-placid-api-token
@@ -676,7 +665,7 @@ npm run start
 ### Key Files
 
 - **lib/supabase.ts**: Database types, helper functions (renderThumbnail, showToast, fileToBase64)
-- **lib/mpesa.ts**: M-Pesa (Daraja) helpers and STK Push initiation
+- **lib/pesaflux.ts**: PesaFlux payment gateway utilities and STK Push initiation
 - **app/api/generate/route.ts**: Placid REST generation endpoint
 - **app/admin/page.tsx**: Admin dashboard with tabs
 

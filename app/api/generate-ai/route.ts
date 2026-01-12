@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase"
 import { injectFieldValues } from "@/lib/ai-blueprint-parser"
 import Replicate from "replicate"
 import { PosterStatus } from "@/lib/status"
+import { emitNotification } from "@/lib/notifications/emitter"
+import { NotificationType } from "@/lib/notifications/types"
 import { checkMaintenanceStatus } from "@/lib/engine-maintenance"
 
 /**
@@ -335,19 +337,37 @@ This is a template rendering task, not a creative design task.`
         const finalImageUrl = publicUrlData.publicUrl
 
         // Create record in generated_posters table (matching Placid flow)
+        // With AI generation, the poster is ready but payment logic determines access
         const { error: dbError } = await supabaseAdmin
             .from("generated_posters")
             .insert({
                 session_id: session_id || `ai-${Date.now()}`,
                 template_id: template_id,
                 image_url: finalImageUrl,
-                status: PosterStatus.COMPLETED  // Use the correct enum value
+                status: PosterStatus.AWAITING_PAYMENT // Lock initially for consistency with Payment Flow
             })
 
         if (dbError) {
             console.error("Database insert error:", dbError)
             // Image is uploaded but DB failed - continue anyway
         }
+
+        // Emit notification for successful AI poster generation
+        emitNotification({
+            type: NotificationType.POSTER_GENERATED,
+            actor: { type: "user", identifier: session_id || "unknown" },
+            summary: `AI Poster generated for template ${template_id}`,
+            metadata: {
+                template_name: template.template_name || "AI Poster",
+                template_id: template_id,
+                poster_link: finalImageUrl,
+                poster_id: session_id,
+                engine: "ai",
+                time: new Date().toISOString()
+            }
+        }).catch(() => {
+            // silent ignore
+        })
 
         // ========================================
         // RESPONSE

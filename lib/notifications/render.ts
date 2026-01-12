@@ -40,10 +40,31 @@ export async function renderTemplate(
 
         const tmpl = template as NotificationTemplate
 
-        // Replace placeholders like {{variable}}
+        // Replace placeholders like {{variable}} or {{ variable.name }}
         const replacePlaceholders = (text: string): string => {
-            return text.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-                return metadata[key] !== undefined ? String(metadata[key]) : match
+            // Regex explanation:
+            // \{\{        -> match opening {{
+            // \s*         -> match optional whitespace
+            // ([\w\.]+)   -> capture group 1: match words or dots (for nested/keys)
+            // \s*         -> match optional whitespace
+            // \}\}        -> match closing }}
+            return text.replace(/\{\{\s*([\w\.]+)\s*\}\}/g, (match, capturedKey) => {
+                const key = capturedKey.trim()
+                const val = metadata[key]
+
+                // If value exists (including empty string or 0), substitution happens
+                if (val !== undefined && val !== null) {
+                    return String(val)
+                }
+
+                // Fallback: Check for case-insensitive match if direct match fails
+                const lowerKey = key.toLowerCase()
+                const foundKey = Object.keys(metadata).find(k => k.toLowerCase() === lowerKey)
+                if (foundKey && metadata[foundKey] !== undefined && metadata[foundKey] !== null) {
+                    return String(metadata[foundKey])
+                }
+
+                return match // Keep original if not found
             })
         }
 
@@ -55,7 +76,7 @@ export async function renderTemplate(
         logError("notifications/render", error)
         return {
             subject: channel === "email" ? `Notification: ${notificationType}` : null,
-            body: `Event: ${notificationType}`,
+            body: `Event: ${notificationType}\n(Template rendering failed)\n${JSON.stringify(metadata, null, 2)}`,
         }
     }
 }

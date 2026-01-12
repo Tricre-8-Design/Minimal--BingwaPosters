@@ -1,46 +1,44 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { normalizePhone } from "@/lib/mpesa"
-import { isValidMpesaReceipt } from "@/lib/validation"
+import { normalizePhone } from "@/lib/pesaflux"
 import { safeErrorResponse } from "@/lib/server-errors"
-import { logInfo, logError, safeRedact } from "@/lib/logger"
+import { logInfo } from "@/lib/logger"
 import { emitNotification } from "@/lib/notifications/emitter"
 import { NotificationType } from "@/lib/notifications/types"
 
 // POST /api/mpesa/callback
-// Handles Daraja STK Callback and updates payments status
+// Handles PesaFlux Webhook and updates payments status
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null)
-    logInfo("api/mpesa/callback", "request_received", { body_keys: Object.keys(body || {}) })
-    if (!body) {
-      return NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 })
+    logInfo("api/mpesa/callback", "request_received", { body_keys: Object.keys(body || {}), body })
+
+    // PesaFlux Payload Structure:
+    // {
+    //   "ResponseCode": 0,
+    //   "ResponseDescription": "Success...",
+    //   "MerchantRequestID": "...",
+    //   "CheckoutRequestID": "...",
+    //   "TransactionID": "SOFTPID...", // matches what initiate returned as transaction_request_id
+    //   "TransactionAmount": 100,
+    //   "TransactionReceipt": "SIS88JC7AM",
+    //   "TransactionDate": "...",
+    //   "TransactionReference": "...",
+    //   "Msisdn": "..."
+    // }
+
+    if (!body || typeof body.ResponseCode === 'undefined') {
+      return NextResponse.json({ success: false, error: "Invalid JSON or missing ResponseCode" }, { status: 400 })
     }
 
-    const stk = body?.Body?.stkCallback
-    if (!stk) {
-      return NextResponse.json({ success: false, error: "Missing stkCallback" }, { status: 400 })
-    }
-
-    const resultCode: number = stk.ResultCode
-    const resultDesc: string = stk.ResultDesc
-    const checkoutId: string | undefined = stk.CheckoutRequestID
-    const metaItems: Array<{ Name: string; Value?: any }> = stk.CallbackMetadata?.Item || []
-
-    const amount = metaItems.find((i) => i.Name === "Amount")?.Value
-    const receipt = metaItems.find((i) => i.Name === "MpesaReceiptNumber")?.Value
-    const phoneRaw = metaItems.find((i) => i.Name === "PhoneNumber")?.Value
-    const accountRef = metaItems.find((i) => i.Name === "AccountReference")?.Value
-    const phone = phoneRaw ? normalizePhone(String(phoneRaw)) : undefined
-    logInfo("api/mpesa/callback", "parsed_metadata", {
-      resultCode,
-      resultDesc,
-      amount,
-      receipt,
-      phone,
-      checkoutId,
-      accountRef,
-    })
+    const {
+      ResponseCode,
+      ResponseDescription,
+      TransactionID, // This correlates to 'transaction_request_id' we stored in mpesa_code
+      TransactionAmount,
+      TransactionReceipt,
+      Msisdn,
+    } = body
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -50,90 +48,98 @@ export async function POST(req: Request) {
     }
 
     const supabaseAdmin = createClient(supabaseUrl, serviceKey)
+    const phone = Msisdn ? normalizePhone(String(Msisdn)) : undefined
 
-    if (resultCode === 0) {
-      // Success: update payment to paid
+    if (ResponseCode === 0 || ResponseCode === "0") {
+      // Success
       let updateError: any = null
 
-      if (checkoutId) {
-        // Locate payment by CheckoutRequestID then update to store the real receipt in mpesa_code
-        const { data: payRowByCheckout } = await supabaseAdmin
+      if (TransactionID) {
+        // Find payment by mpesa_code (which currently holds the TransactionID/RequestID)
+        const { data: payRow } = await supabaseAdmin
           .from("payments")
           .select("id, session_id")
-          .eq("mpesa_code", checkoutId)
+          .eq("mpesa_code", TransactionID)
           .limit(1)
           .single()
 
-        if (payRowByCheckout?.id) {
-          const updatePayload: Record<string, any> = { status: "Paid", amount: amount ?? 1 }
-          if (isValidMpesaReceipt(receipt)) {
-            updatePayload.mpesa_code = String(receipt)
-          }
-          const { error } = await supabaseAdmin.from("payments").update(updatePayload).eq("id", payRowByCheckout.id)
+        if (payRow?.id) {
+          // Update to Paid and set mpesa_code to the actual receipt
+          const { error } = await supabaseAdmin
+            .from("payments")
+            .update({
+              status: "Paid",
+              amount: TransactionAmount,
+              mpesa_code: TransactionReceipt // Overwrite RequestID with actual Receipt
+            })
+            .eq("id", payRow.id)
+
           updateError = error
-          logInfo("api/mpesa/callback", "payment_update_by_checkout", { payment_id: payRowByCheckout.id, receipt_valid: isValidMpesaReceipt(receipt) })
-          // Also mark associated poster as COMPLETED via session_id
-          if (!error && payRowByCheckout.session_id) {
+          logInfo("api/mpesa/callback", "payment_update_by_tid", { payment_id: payRow.id, receipt: TransactionReceipt })
+
+          if (!error && payRow.session_id) {
             await supabaseAdmin
               .from("generated_posters")
               .update({ status: "COMPLETED" })
-              .eq("session_id", String(payRowByCheckout.session_id))
-            logInfo("api/mpesa/callback", "poster_mark_completed", { session_id: String(payRowByCheckout.session_id) })
+              .eq("session_id", String(payRow.session_id))
           }
+        } else {
+          // Fallback: Could not find by TransactionID, try searching by phone + pending
+          // NOTE: PesaFlux might return different ID or we didn't save it correctly.
+          logInfo("api/mpesa/callback", "tid_not_found", { TransactionID })
         }
       }
 
-      // Fallback: update latest pending by phone number
-      if (updateError && phone) {
+      // Fallback: update latest pending by phone number if we didn't match ID or ID was missing
+      if ((!TransactionID || updateError) && phone) {
         const { data: pendingRows } = await supabaseAdmin
           .from("payments")
-          .select("id")
+          .select("id, session_id")
           .eq("phone_number", Number(phone))
           .eq("status", "Pending")
           .order("created_at", { ascending: false })
           .limit(1)
 
-        const targetId = pendingRows?.[0]?.id
-        if (targetId) {
+        const target = pendingRows?.[0]
+        if (target) {
           await supabaseAdmin
             .from("payments")
-            .update({ status: "Paid", amount: amount ?? 1 })
-            .eq("id", targetId)
-          logInfo("api/mpesa/callback", "payment_update_by_phone", { payment_id: targetId })
+            .update({
+              status: "Paid",
+              amount: TransactionAmount,
+              mpesa_code: TransactionReceipt || TransactionID
+            })
+            .eq("id", target.id)
+          logInfo("api/mpesa/callback", "payment_update_by_phone", { payment_id: target.id })
+
+          if (target.session_id) {
+            await supabaseAdmin
+              .from("generated_posters")
+              .update({ status: "COMPLETED" })
+              .eq("session_id", String(target.session_id))
+          }
         }
       }
 
-      // If not linked via checkoutId above, try fallback via AccountReference
-      if (updateError && accountRef) {
-        await supabaseAdmin
-          .from("generated_posters")
-          .update({ status: "COMPLETED" })
-          .eq("session_id", String(accountRef))
-        logInfo("api/mpesa/callback", "poster_mark_completed_fallback", { session_id: String(accountRef) })
-      }
-
-      // Emit notification for successful payment
+      // Emit notification
       emitNotification({
         type: NotificationType.PAYMENT_SUCCESS,
         actor: { type: "user", identifier: phone || "unknown" },
-        summary: `Payment received: KES ${amount || 0} from ${phone || "unknown"}`,
+        summary: `Payment received: KES ${TransactionAmount || 0} from ${phone || "unknown"}`,
         metadata: {
-          amount: amount || 0,
+          amount: TransactionAmount || 0,
           phone: phone || "unknown",
-          mpesa_code: receipt || checkoutId || "unknown",
-          template_name: "unknown", // Could be fetched via session_id if needed
+          mpesa_code: TransactionReceipt || TransactionID || "unknown",
           time: new Date().toISOString(),
         },
-      }).catch(() => {
-        // Silently ignore notification errors
-      })
+      }).catch(() => { })
 
-      return NextResponse.json({ success: true, status: "Paid", receipt, checkoutId, amount })
+      return NextResponse.json({ success: true, message: "Payment processed" })
+
     } else {
-      // Failure: mark pending payment as failed (by checkoutId or phone)
-      if (checkoutId) {
-        await supabaseAdmin.from("payments").update({ status: "Failed" }).eq("mpesa_code", checkoutId)
-        logInfo("api/mpesa/callback", "mark_failed_by_checkout", { checkoutId })
+      // Failure
+      if (TransactionID) {
+        await supabaseAdmin.from("payments").update({ status: "Failed" }).eq("mpesa_code", TransactionID)
       } else if (phone) {
         const { data: pendingRows } = await supabaseAdmin
           .from("payments")
@@ -142,14 +148,11 @@ export async function POST(req: Request) {
           .eq("status", "Pending")
           .order("created_at", { ascending: false })
           .limit(1)
-        const targetId = pendingRows?.[0]?.id
-        if (targetId) {
-          await supabaseAdmin.from("payments").update({ status: "Failed" }).eq("id", targetId)
-          logInfo("api/mpesa/callback", "mark_failed_by_phone", { payment_id: targetId })
+        if (pendingRows?.[0]?.id) {
+          await supabaseAdmin.from("payments").update({ status: "Failed" }).eq("id", pendingRows[0].id)
         }
       }
 
-      // Emit notification for failed payment
       emitNotification({
         type: NotificationType.PAYMENT_FAILED,
         actor: { type: "user", identifier: phone || "unknown" },
@@ -157,20 +160,20 @@ export async function POST(req: Request) {
         metadata: {
           phone: phone || "unknown",
           time: new Date().toISOString(),
-          reason: resultDesc || "Unknown error",
+          reason: ResponseDescription || "Unknown error",
         },
-      }).catch(() => {
-        // Silently ignore notification errors
-      })
+      }).catch(() => { })
 
-      return NextResponse.json({ success: true, status: "Failed", resultDesc }, { status: 200 })
+      // Return 200 to acknowledge receipt even on failure
+      return NextResponse.json({ success: true, message: "Failure logged" })
     }
+
   } catch (error: any) {
     try { console.error(`[${new Date().toISOString()}] [api/mpesa/callback] ERROR`, error) } catch { }
     return await safeErrorResponse(
       "api/mpesa/callback",
       error,
-      "We couldn’t process the payment callback — please try again.",
+      "We couldn’t process the payment callback.",
       500,
       { endpoint: "mpesa/callback" },
     )

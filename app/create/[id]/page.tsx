@@ -368,10 +368,21 @@ export default function CreatePoster() {
       logInfo("ui/create", "generate_response", { elapsed_ms: elapsedMs(t0), has_url: !!body.image_url, session_id: body.session_id })
       if (body.image_url) {
         setGeneratedPoster(body.image_url)
-        showToast("Poster generated successfully!", "success")
+        // Explicitly set status to locked/awaiting payment to ensure overlay appears immediately
+        setPosterStatus(PosterStatus.AWAITING_PAYMENT)
+
+        // If price is 0, we can unlock it immediately (logic likely handled by backend, but safe to default to locked here)
+        if (template.price === 0) {
+          setPosterStatus(PosterStatus.COMPLETED)
+          showToast("Poster generated successfully!", "success")
+        } else {
+          showToast("Poster generated! Payment required to unlock.", "success")
+          // Optional: Auto-redirect to payment page after short delay?
+          // setTimeout(() => router.push(`/payment/${sessionId}`), 1500)
+        }
         setIsGenerating(false)
       } else {
-        // No immediate image_url: generation queued. Rely on realtime updates without sending a notify toast.
+        // No immediate image_url: generation queued
         logInfo("ui/create", "generation_queued", { session_id: sessionId })
       }
     } catch (err: any) {
@@ -815,12 +826,18 @@ export default function CreatePoster() {
             <div className="relative">
               {generatedPoster ? (
                 <div className="space-y-4">
-                  <div className="relative aspect-[4/3] bg-white rounded-lg overflow-hidden border-2 border-primary shadow-md">
-                    <img
-                      src={generatedPoster || "/placeholder.svg"}
-                      alt="Generated poster"
-                      className="w-full h-full object-cover"
-                    />
+                  <div
+                    className="relative aspect-[4/3] bg-white rounded-lg overflow-hidden border-2 border-primary shadow-md group select-none"
+                    onContextMenu={(e) => e.preventDefault()} // Disable right click
+                  >
+                    <div className={posterStatus !== PosterStatus.COMPLETED ? "filter blur-sm brightness-90 transition-all duration-500" : ""}>
+                      <img
+                        src={generatedPoster || "/placeholder.svg"}
+                        alt="Generated poster"
+                        className="w-full h-full object-cover pointer-events-none" // Prevent drag/save
+                      />
+                    </div>
+
                     {/* Blur overlay while awaiting payment */}
                     <AnimatePresence>
                       {posterStatus !== PosterStatus.COMPLETED && (
@@ -828,19 +845,25 @@ export default function CreatePoster() {
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           exit={{ opacity: 0 }}
-                          className="absolute inset-0 backdrop-blur-2xl bg-white/10 flex flex-col items-center justify-center p-6 space-y-4"
+                          className="absolute inset-0 z-20 backdrop-blur-md bg-black/40 flex flex-col items-center justify-center p-6 space-y-6"
                         >
-                          <div className="text-6xl mb-4">🔒</div>
-                          <h4 className="text-2xl font-bold text-white font-space text-center drop-shadow-lg">
-                            Payment Required
-                          </h4>
-                          <p className="text-white/90 text-center font-inter drop-shadow">
-                            Complete payment to unlock your high-quality poster download
-                          </p>
-                          <Link href={`/payment/${sessionId}`}>
-                            <Button className="bg-primary hover:bg-primary-hover text-white py-3 px-8 text-lg font-space shadow-glowOrange">
-                              <Download className="w-5 h-5 mr-2" />
-                              Pay KSh {template?.price} to unlock
+                          <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-sm shadow-xl border border-white/20 animate-bounce">
+                            <div className="text-4xl">🔒</div>
+                          </div>
+
+                          <div className="text-center space-y-2">
+                            <h4 className="text-3xl font-bold text-white font-space drop-shadow-lg tracking-wide">
+                              Poster Locked
+                            </h4>
+                            <p className="text-white/90 text-lg font-inter drop-shadow max-w-xs mx-auto leading-relaxed">
+                              Pay <span className="font-bold text-warning">KSh {template?.price}</span> to reveal and download your design
+                            </p>
+                          </div>
+
+                          <Link href={`/payment/${sessionId}`} className="w-full max-w-xs">
+                            <Button className="w-full bg-success hover:bg-success-hover text-white py-6 text-xl font-bold font-space shadow-[0_0_20px_rgba(34,197,94,0.4)] hover:scale-105 transition-all duration-300 border border-white/20">
+                              <Zap className="w-6 h-6 mr-2 fill-current animate-pulse" />
+                              Unlock Now
                             </Button>
                           </Link>
                         </motion.div>
