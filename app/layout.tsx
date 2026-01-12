@@ -4,9 +4,14 @@ import { inter, poppins } from "./fonts"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Poster Generator - Create Professional Posters Instantly",
+  title: "Bingwa Poster Generator - Create Professional Bingwa Posters Instantly",
   description: "Generate professional posters for your business in seconds. No design skills required.",
-    generator: 'v0.app'
+  generator: 'Wazimu Creator',
+  icons: {
+    icon: '/logo.svg',
+    shortcut: '/logo.svg',
+    apple: '/logo.svg',
+  }
 }
 
 export default function RootLayout({

@@ -76,12 +76,25 @@ export default function DownloadPage() {
         .eq("session_id", sessionId)
         .single()
 
+      // Try to get phone from payments if missing
+      let phone = existing.mpesaNumber
+      if (!phone) {
+        const { data: payData } = await supabase
+          .from("payments")
+          .select("phone_number")
+          .eq("session_id", sessionId)
+          .eq("status", "Paid")
+          .limit(1)
+          .maybeSingle()
+        if (payData) phone = payData.phone_number
+      }
+
       if (data) {
         const merged = {
           ...existing,
           posterUrl: data.image_url,
           templateName: data.template_name,
-          mpesaNumber: existing.mpesaNumber // Preserve if exists
+          mpesaNumber: phone // Preserve if exists or found
         }
         setSessionData(merged)
         localStorage.setItem(sessionId, JSON.stringify(merged))
@@ -130,7 +143,7 @@ export default function DownloadPage() {
     setSubmitting(true)
     try {
       await supabase.from("feedback").insert({
-        phone_number: sessionData?.mpesaNumber || "unknown",
+        phone_number: sessionData?.mpesaNumber ? Number(sessionData.mpesaNumber) : null,
         rating,
         comment: feedback,
         template_name: sessionData?.templateName
