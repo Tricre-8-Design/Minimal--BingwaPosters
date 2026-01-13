@@ -1,5 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { inter, poppins } from "./fonts"
 import "./globals.css"
 
@@ -24,6 +25,7 @@ export default function RootLayout({
       <body className="font-inter antialiased bg-app text-text-primary min-h-screen relative overflow-x-hidden">
         {/* Global content wrapper with consistent fade-in */}
         <div className="section-fade-in">{children}</div>
+        <SpeedInsights />
       </body>
     </html>
   )
