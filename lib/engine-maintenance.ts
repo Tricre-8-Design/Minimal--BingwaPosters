@@ -28,9 +28,10 @@ export async function checkMaintenanceStatus(
 
         const settingValue = data.setting_value as { enabled: boolean; message: string }
 
-        console.log(`[${engine}] Raw data from DB:`, data)
-        console.log(`[${engine}] Parsed setting_value:`, settingValue)
-        console.log(`[${engine}] isUnderMaintenance will be:`, settingValue.enabled)
+        // Logs removed to reduce noise
+        // console.log(`[${engine}] Raw data from DB:`, data)
+        // console.log(`[${engine}] Parsed setting_value:`, settingValue)
+        // console.log(`[${engine}] isUnderMaintenance will be:`, settingValue.enabled)
 
         return {
             isUnderMaintenance: settingValue.enabled || false,
