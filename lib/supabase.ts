@@ -141,6 +141,15 @@ export interface Testimonial {
   updated_at: string
 }
 
+export interface PosterRequest {
+  id: string
+  poster_url: string
+  description: string | null
+  phone_number: string | null
+  status: "pending" | "added" | "ignored"
+  created_at: string
+}
+
 export interface SiteSetting {
   id: number
   setting_key: string

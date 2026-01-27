@@ -128,6 +128,7 @@ export default function NotificationsTable() {
                         <option value="PAYMENT_FAILED">Payment Failed</option>
                         <option value="POSTER_DOWNLOADED">Poster Downloaded</option>
                         <option value="POSTER_REVIEW_SUBMITTED">Review Submitted</option>
+                        <option value="POSTER_REQUEST_SUBMITTED">Poster Request</option>
                     </select>
 
                     <button

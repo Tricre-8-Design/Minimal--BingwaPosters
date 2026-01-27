@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5] - 2026-01-27
+
+### Poster Request Feature ✅
+- **User Interface**:
+  - Added a Floating Action Button (FAB) on the root page for requesting custom posters.
+  - Implemented `PosterRequestModal` with image upload (Supabase Storage) and detailed request form.
+  - Added real-time success feedback and contact info collection.
+- **Admin Management**:
+  - Added a new "Poster Requests" tab in the admin dashboard.
+  - Full CRUD operations for requests, including marking as "Added" and status tracking.
+  - Integrated requests into the admin notification system with a dedicated filter.
+- **Backend & Database**:
+  - Created `poster_requests` table and `poster-requests` storage bucket.
+  - Implemented secure API route `/api/poster-request` for submission and system-wide notifications.
+  - Set up RLS and storage policies for public/anonymous contributions.
+
+## [0.5.4] - 2026-01-27
+
+### Create Page Guidance ✅
+- Added a first-open instruction modal on `/create/[id]` to guide users on prices, contact details, and optional pricing.
+
 ## [0.5.3] - 2026-01-13
 
 ### User Experience & Payment Improvements ✅

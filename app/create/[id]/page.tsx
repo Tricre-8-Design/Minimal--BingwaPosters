@@ -5,6 +5,14 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -20,6 +28,7 @@ import {
   Palette,
   AlertCircle,
   Download,
+  Info,
 } from "lucide-react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
@@ -76,6 +85,7 @@ export default function CreatePoster() {
   const [loadingMessage, setLoadingMessage] = useState("")
   const [sessionId, setSessionId] = useState("")
   const [extractedFields, setExtractedFields] = useState<ExtractedField[]>([]) // For AI templates
+  const [isInstructionsOpen, setIsInstructionsOpen] = useState(true)
 
   // Maintenance status
   const [maintenanceStatus, setMaintenanceStatus] = useState<{
@@ -121,6 +131,7 @@ export default function CreatePoster() {
 
 
   useEffect(() => {
+    setIsInstructionsOpen(true)
     // Generate session ID
     setSessionId(`session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
 
@@ -289,6 +300,7 @@ export default function CreatePoster() {
   // New handler for the Generate button
   const handleGenerateClick = async () => {
     if (isGenerating) return
+    setIsInstructionsOpen(false)
 
     if (!template) {
       showToast("Template not loaded", "error")
@@ -554,6 +566,43 @@ export default function CreatePoster() {
           </Card>
         </div>
       </section>
+
+      <Dialog open={isInstructionsOpen} onOpenChange={setIsInstructionsOpen}>
+        <DialogContent className="max-w-xl bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-space text-xl">
+              <Info className="h-5 w-5 text-primary" />
+              📢 How to Generate Your Poster
+            </DialogTitle>
+            <DialogDescription className="text-slate-700">
+              Important: The offers are already set. You only need to add your specific details below.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ul className="space-y-4 text-slate-800 list-disc pl-5">
+            <li>
+              <span className="font-semibold">Enter Prices Only:</span> Type numbers only (e.g., 20 ). Do not include &quot;Ksh&quot; or any symbols.
+            </li>
+            <li>
+              <span className="font-semibold">Contact Details:</span> Enter your Lipa na M-PESA Till Number and Phone Number exactly as they should appear.
+            </li>
+            <li>
+              <span className="font-semibold">Optional Pricing:</span> If the default prices on the preview suit your needs, you can leave the price fields blank .
+            </li>
+          </ul>
+
+          <DialogFooter className="sm:justify-start">
+            <Button
+              type="button"
+              onClick={() => setIsInstructionsOpen(false)}
+              autoFocus
+              className="bg-primary hover:bg-primary-hover text-white shadow-glowOrange"
+            >
+              Got it, Let&apos;s Go!
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Full-screen, accessible loading overlay while generation is in progress */}
       <GenerationStatus

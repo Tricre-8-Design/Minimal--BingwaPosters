@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BarChart3, ImageIcon, MessageCircle, CreditCard, Settings } from "lucide-react"
+import { BarChart3, ImageIcon, MessageCircle, CreditCard, Settings, ClipboardList } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 
@@ -17,6 +17,7 @@ import NotificationsTable from "@/components/admin/notifications/NotificationsTa
 import NotificationUsers from "@/components/admin/notifications/NotificationUsers"
 import NotificationTemplates from "@/components/admin/notifications/NotificationTemplates"
 import SystemSettingsContent from "@/components/admin/system-settings-content"
+import PosterRequestsContent from "@/components/admin/poster-requests-content"
 
 interface DashboardStats {
   totalPosters: number
@@ -273,7 +274,7 @@ export default function AdminPage() {
         <div className="max-w-7xl mx-auto space-y-6 md:space-y-8">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {/* Tab Navigation */}
-            <TabsList className="sticky top-0 z-50 grid w-full grid-cols-8 gap-2 h-auto p-1 bg-surface/90 backdrop-blur-md border border-white/20 rounded-xl mb-6 shadow-soft">
+            <TabsList className="sticky top-0 z-50 grid w-full grid-cols-9 gap-2 h-auto p-1 bg-surface/90 backdrop-blur-md border border-white/20 rounded-xl mb-6 shadow-soft">
               <TabsTrigger
                 value="dashboard"
                 className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
@@ -288,6 +289,14 @@ export default function AdminPage() {
               >
                 <ImageIcon className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Templates</span>
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="poster-requests"
+                className="data-[state=active]:bg-primary data-[state=active]:text-white text-text-secondary hover:text-primary transition-all duration-300 py-3 font-inter rounded-md"
+              >
+                <ClipboardList className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">Requests</span>
               </TabsTrigger>
 
               <TabsTrigger
@@ -347,6 +356,10 @@ export default function AdminPage() {
 
               <TabsContent value="templates" className="animate-in fade-in-0 duration-300 mt-0">
                 <TemplatesContent />
+              </TabsContent>
+
+              <TabsContent value="poster-requests" className="animate-in fade-in-0 duration-300 mt-0">
+                <PosterRequestsContent />
               </TabsContent>
 
               <TabsContent value="feedback" className="animate-in fade-in-0 duration-300 mt-0">

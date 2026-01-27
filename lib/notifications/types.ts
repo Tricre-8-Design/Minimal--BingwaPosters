@@ -13,6 +13,7 @@ export enum NotificationType {
     PAYMENT_FAILED = "PAYMENT_FAILED",
     POSTER_DOWNLOADED = "POSTER_DOWNLOADED",
     POSTER_REVIEW_SUBMITTED = "POSTER_REVIEW_SUBMITTED",
+    POSTER_REQUEST_SUBMITTED = "POSTER_REQUEST_SUBMITTED",
 }
 
 export type ActorType = "admin" | "user" | "system"

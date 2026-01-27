@@ -30,6 +30,8 @@ import HeadlineRotator from "@/components/ui/headline-rotator"
 
 import LoadingScreen from "@/components/loading-screen"
 import { BackgroundWrapper } from "@/components/ui/background-wrapper"
+import PosterRequestModal from "@/components/poster-request-modal"
+import { MessageSquarePlus } from "lucide-react"
 
 export default function HomePage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -44,6 +46,7 @@ export default function HomePage() {
   const [updatedNotice, setUpdatedNotice] = useState(false)
   const [recentlyRefreshed, setRecentlyRefreshed] = useState(false)
   const [activeTab, setActiveTab] = useState<"classic" | "instant">("classic")
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false)
 
   // Maintenance status
   const [maintenanceStatus, setMaintenanceStatus] = useState<{
@@ -820,6 +823,29 @@ export default function HomePage() {
           </Card>
         </div>
       )}
+
+      {/* Floating Action Button */}
+      <div className="fixed bottom-6 right-6 z-40 group">
+        <div className="absolute -inset-2 bg-primary/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+        <Button
+          onClick={() => setIsRequestModalOpen(true)}
+          className="relative h-14 w-14 md:h-16 md:w-16 rounded-full bg-primary hover:bg-primary-hover text-white shadow-glowOrange border-2 border-white/20 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95"
+          title="Request a custom poster"
+        >
+          <MessageSquarePlus className="w-6 h-6 md:w-8 md:h-8" />
+        </Button>
+        
+        {/* Tooltip-like label */}
+        <div className="absolute right-full mr-4 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-white text-primary text-sm font-bold rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none whitespace-nowrap border border-primary/20">
+          Request a Poster
+        </div>
+      </div>
+
+      {/* Poster Request Modal */}
+      <PosterRequestModal 
+        isOpen={isRequestModalOpen} 
+        onClose={() => setIsRequestModalOpen(false)} 
+      />
     </BackgroundWrapper>
   )
 }
