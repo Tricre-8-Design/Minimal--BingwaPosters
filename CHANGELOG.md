@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.6] - 2026-02-14
+
+### Revert Payment System to M-Pesa ✅
+- **Rollback**: Reverted PesaFlux integration (introduced in v0.5.1) and restored original M-Pesa Daraja implementation.
+- **Reason**: Decision to return to direct M-Pesa integration for payment processing.
+- **Changes**:
+  - Restored `lib/mpesa.ts` with Daraja API logic.
+  - Deleted `lib/pesaflux.ts`.
+  - Reverted `app/api/mpesa/initiate/route.ts` and `app/api/mpesa/callback/route.ts` to use `initiateStkPush` from `lib/mpesa`.
+  - Updated `app/payment/[sessionId]/page.tsx` to reflect M-Pesa branding and logic.
+
 ## [0.5.5] - 2026-01-27
 
 ### Poster Request Feature ✅

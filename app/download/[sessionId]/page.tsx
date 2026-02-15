@@ -22,6 +22,7 @@ export default function DownloadPage() {
   const [feedback, setFeedback] = useState("")
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [suggestedTemplates, setSuggestedTemplates] = useState<PosterTemplate[]>([])
 
@@ -307,9 +308,16 @@ export default function DownloadPage() {
                   />
 
                   <div className="flex gap-3">
-                    <Dialog.Close asChild>
-                      <Button variant="ghost" className="flex-1 text-text-secondary hover:bg-black/5">Skip</Button>
-                    </Dialog.Close>
+                    <Button
+                      variant="ghost"
+                      className="flex-1 text-text-secondary hover:bg-black/5"
+                      onClick={() => {
+                        setIsFeedbackOpen(false)
+                        setIsWhatsAppOpen(true)
+                      }}
+                    >
+                      Skip
+                    </Button>
                     <Button
                       onClick={submitFeedback}
                       disabled={submitting}
@@ -329,6 +337,36 @@ export default function DownloadPage() {
                   </Button>
                 </div>
               )}
+            </Dialog.Content>
+          </div>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* WhatsApp Modal */}
+      <Dialog.Root open={isWhatsAppOpen} onOpenChange={setIsWhatsAppOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-fadeIn" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <Dialog.Content className="pointer-events-auto w-[90vw] max-w-sm rounded-2xl bg-surface p-8 shadow-2xl border border-white/20 animate-scaleIn text-center">
+              <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MessageSquare className="w-8 h-8 text-success fill-current" />
+              </div>
+              <Dialog.Title className="text-xl font-bold text-text-primary font-space mb-2">Not In the Whatsapp group?</Dialog.Title>
+              <Dialog.Description className="text-text-secondary font-inter mb-6">
+                You are missing alot. Join our WhatsApp group to get poster updates, tips, and more!
+              </Dialog.Description>
+              
+              <div className="flex flex-col gap-3">
+                <Button 
+                  onClick={() => window.open("https://chat.whatsapp.com/K7nt6n1JAYUGbB0wo4mS5x", "_blank")}
+                  className="w-full bg-success hover:bg-success-hover text-white shadow-md font-bold py-6"
+                >
+                  Join WhatsApp Group
+                </Button>
+                <Dialog.Close asChild>
+                  <Button variant="ghost" className="w-full text-text-secondary">Maybe Later</Button>
+                </Dialog.Close>
+              </div>
             </Dialog.Content>
           </div>
         </Dialog.Portal>

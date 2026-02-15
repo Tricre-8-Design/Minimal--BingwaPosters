@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { initiatePesaFluxStkPush, normalizePhone } from "@/lib/pesaflux" // Changed import
+import { initiateStkPush, normalizePhone } from "@/lib/mpesa"
 import { logError } from "@/lib/server-errors"
-import { logInfo, logStep } from "@/lib/logger"
+import { logInfo, logStep, safeRedact } from "@/lib/logger"
 
 // POST /api/mpesa/initiate
 // Input: { session_id, amount, phoneNumber }
-// Validates and initiates STK Push via PesaFlux, records pending payment in Supabase
+// Validates and initiates STK Push, records pending payment in Supabase
 export async function POST(req: Request) {
   try {
     const { session_id, phoneNumber } = await req.json()
@@ -37,6 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Database error" }, { status: 500 })
     }
     if (!posterRows || posterRows.length === 0) {
+      try { console.error(`[${new Date().toISOString()}] [api/mpesa/initiate] invalid_session session_id=${session_id}`) } catch {}
       return NextResponse.json({ success: false, error: "Invalid session_id" }, { status: 404 })
     }
 
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
       }
       normalizedAmount = Number(tpl?.price ?? 0)
     } else if (templateUuid) {
+      // Fallback: derive price via template_uuid if template_id missing
       const { data: tpl2, error: tplErr2 } = await supabaseAdmin
         .from("poster_templates")
         .select("price")
@@ -71,8 +73,9 @@ export async function POST(req: Request) {
       }
       normalizedAmount = Number(tpl2?.price ?? 0)
     }
-
+    // Fallback: if templateId missing or price invalid
     if (!normalizedAmount || normalizedAmount <= 0) {
+      try { console.error(`[${new Date().toISOString()}] [api/mpesa/initiate] invalid_price amount=${normalizedAmount}`) } catch {}
       return NextResponse.json({ success: false, error: "Invalid or missing template price" }, { status: 400 })
     }
     const phone = normalizePhone(phoneNumber)
@@ -84,7 +87,7 @@ export async function POST(req: Request) {
       .insert({
         phone_number: Number(phone),
         image_url: imageUrl,
-        mpesa_code: null, // Will update with PesaFlux ID
+        mpesa_code: null,
         status: "Pending",
         session_id,
         amount: normalizedAmount,
@@ -101,45 +104,49 @@ export async function POST(req: Request) {
       })
       return NextResponse.json({ success: false, error: "Failed to insert payment" }, { status: 500 })
     }
+    logInfo("api/mpesa/initiate", "payment_row_inserted", { payment_id: paymentIns?.id, amount: normalizedAmount })
 
-    // Initiate STK Push via PesaFlux
-    const stk = await initiatePesaFluxStkPush({
+    // Initiate STK Push
+    const desc = `Payment for poster generation job ${session_id}`
+    const stk = await initiateStkPush({
       amount: normalizedAmount,
       phoneNumber: phone,
-      reference: session_id, // Pass session_id as reference for easier debugging/linking if needed
+      accountReference: "Bingwa Poster",
+      transactionDesc: desc,
     })
+    logInfo("api/mpesa/initiate", "stk_push_done", { keys: Object.keys(stk || {}), CheckoutRequestID: stk?.CheckoutRequestID })
 
-    logInfo("api/mpesa/initiate", "stk_push_done", { response: stk })
+    const checkoutId = stk?.CheckoutRequestID
+    const merchantId = stk?.MerchantRequestID
+    const customerMessage = stk?.CustomerMessage
 
-    const transactionReqId = stk.transaction_request_id
-
-    // Update payment row with transaction_request_id for linking callback
-    if (transactionReqId) {
+    // Update payment row with CheckoutRequestID for linking callback
+    if (checkoutId) {
       const { error: updateErr } = await supabaseAdmin
         .from("payments")
-        .update({ mpesa_code: transactionReqId })
+        .update({ mpesa_code: checkoutId })
         .eq("id", paymentIns.id)
       if (updateErr) {
         await logError({ source: "api/mpesa/initiate", error: updateErr, statusCode: 500, meta: { payment_id: paymentIns.id } })
       }
     }
 
-    logStep("api/mpesa/initiate", "respond_200", { session_id, transaction_request_id: transactionReqId })
+    logStep("api/mpesa/initiate", "respond_200", { session_id, CheckoutRequestID: checkoutId })
     return NextResponse.json(
       {
         success: true,
         session_id,
         amount: normalizedAmount,
         phone: phone,
-        CheckoutRequestID: transactionReqId, // Keep strictly for frontend compatibility if it expects this key
-        MerchantRequestID: transactionReqId, // Mapping to same for now
-        CustomerMessage: stk.massage,
+        CheckoutRequestID: checkoutId,
+        MerchantRequestID: merchantId,
+        CustomerMessage: customerMessage,
       },
       { status: 200 },
     )
   } catch (error: any) {
     await logError({ source: "api/mpesa/initiate", error, statusCode: 500 })
-    try { console.error(`[${new Date().toISOString()}] [api/mpesa/initiate] ERROR`, error) } catch { }
+    try { console.error(`[${new Date().toISOString()}] [api/mpesa/initiate] ERROR`, error) } catch {}
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
